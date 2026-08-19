@@ -6,6 +6,8 @@ import base64
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
 import os
+import shutil
+import tempfile
 
 # Set page configuration
 st.set_page_config(
@@ -46,7 +48,7 @@ def safe_write_cell(ws, cell_address, value):
         return False
 
 def create_excel_template(data):
-    """Create Excel file with filled data"""
+    """Create Excel file with filled data - working with a copy"""
     # Check if template exists
     template_path = 'HSWP_template.xlsx'
     if not os.path.exists(template_path):
@@ -54,8 +56,14 @@ def create_excel_template(data):
         return None
     
     try:
-        # Load the template
-        wb = load_workbook(template_path)
+        # Create a temporary copy of the template
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            # Copy the template to temp file
+            shutil.copy2(template_path, tmp_file.name)
+            temp_template_path = tmp_file.name
+        
+        # Load the temporary copy
+        wb = load_workbook(temp_template_path)
         ws = wb.worksheets[0]  # First sheet (Work Permit)
         
         # Fill PROJECT DETAILS - using safe_write_cell for all
@@ -208,31 +216,42 @@ def create_excel_template(data):
         safe_write_cell(ws, 'G52', data.get('safety_officer_approval', ''))
         
         # Fill waste generation section
-        if data.get('waste_generation', 'NO'):
+        if data.get('waste_generation') == 'YES':
             safe_write_cell(ws, 'B37', 'YES')
             waste_list = data.get('waste_list', '')
             safe_write_cell(ws, 'C37', waste_list)
         else:
             safe_write_cell(ws, 'B37', 'NO')
         
-        # Fill list of tools and materials header (already in tools section above)
+        # Save the workbook
+        wb.save(temp_template_path)
         
-        return wb
-    
+        # Read the saved file into memory for download
+        with open(temp_template_path, 'rb') as f:
+            file_data = f.read()
+        
+        # Clean up temp file
+        try:
+            os.unlink(temp_template_path)
+        except:
+            pass
+        
+        # Create a BytesIO object with the data
+        output = io.BytesIO(file_data)
+        output.seek(0)
+        
+        return output
+        
     except Exception as e:
         st.error(f"Error processing template: {str(e)}")
         import traceback
         st.error(traceback.format_exc())
         return None
 
-def get_excel_download_link(wb, filename):
+def get_excel_download_link(file_data, filename):
     """Generate download link for Excel file"""
-    output = io.BytesIO()
-    wb.save(output)
-    output.seek(0)
-    
-    b64 = base64.b64encode(output.getvalue()).decode()
-    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold;">📥 Download Completed Excel File</a>'
+    b64 = base64.b64encode(file_data).decode()
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}" style="background-color: #4CAF50; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; font-weight: bold; font-size: 16px;">📥 Download Completed Excel File</a>'
     return href
 
 def main():
@@ -346,7 +365,7 @@ def main():
         waste_list = ""
         if waste_generation == "YES":
             waste_list = st.text_area("Identify and list possible waste generated", 
-                                     value="Cable scraps\nPackaging materials\nUsed PPE")
+                                     value="Cable scraps\nPackaging materials\nUsed PPE", height=80)
     
     with col2:
         st.subheader("⚠️ Job Hazard Assessment")
@@ -511,11 +530,11 @@ def main():
         with st.spinner("Generating Excel file..."):
             try:
                 # Create Excel file
-                wb = create_excel_template(data)
-                if wb:
+                file_data = create_excel_template(data)
+                if file_data:
                     # Generate download link
                     filename = f"HSWP_{project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-                    download_link = get_excel_download_link(wb, filename)
+                    download_link = get_excel_download_link(file_data.getvalue(), filename)
                     
                     st.success("✅ Excel file generated successfully!")
                     st.markdown(download_link, unsafe_allow_html=True)
@@ -559,16 +578,18 @@ def main():
         - The template file 'HSWP_template.xlsx' must be in the repository
         - All fields marked with * are required
         - The generated file will be named with the project name and timestamp
+        - The original template will NOT be modified
         """)
         
         st.header("ℹ️ About")
         st.markdown("""
         This tool automates the creation of Health and Safety Work Permits.
         
-        **Version:** 1.0.1
+        **Version:** 1.0.2
         **Last Updated:** 2026-08-19
         
         **Features:**
+        - Works with a copy of the template (original preserved)
         - Handles merged cells properly
         - Complete form coverage
         - Data validation
