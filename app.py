@@ -5,9 +5,12 @@ import io
 import base64
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
+from openpyxl.drawing.image import Image
 import os
 import shutil
 import tempfile
+import zipfile
+import xml.etree.ElementTree as ET
 
 # Set page configuration
 st.set_page_config(
@@ -65,8 +68,8 @@ def create_excel_template(data):
         # ============================================
         
         # Row 2: Sub Contractor and Requesting Vendor
-        safe_write_cell(ws, 'B2', data.get('sub_contractor', 'DNA'))
-        safe_write_cell(ws, 'D2', data.get('requesting_vendor', 'NOKIA'))
+        safe_write_cell(ws, 'B2', data.get('sub_contractor', 'Ultegra Supplies and Services'))
+        safe_write_cell(ws, 'D2', data.get('requesting_vendor', 'NOKIA SHANGHAI BELL'))
         
         # Row 4: Project In-Charge and Person In-charge
         safe_write_cell(ws, 'B4', data.get('project_in_charge', ''))
@@ -79,27 +82,89 @@ def create_excel_template(data):
         
         # Row 6: Project Name, Start Date, Start Time
         safe_write_cell(ws, 'B6', data.get('project_name', 'FTTH HORIZONTAL'))
-        safe_write_cell(ws, 'D6', data.get('start_date', ''))
-        safe_write_cell(ws, 'F6', data.get('start_time', ''))
+        safe_write_cell(ws, 'D6', data.get('start_date', '08/10/2026'))
+        safe_write_cell(ws, 'F6', data.get('start_time', '08:00AM'))
         
         # Row 7: Work Location, End Date, End Time
         safe_write_cell(ws, 'B7', data.get('work_location', 'MIN624_TS ORAPOBBUTUANAGN'))
-        safe_write_cell(ws, 'D7', data.get('end_date', ''))
-        safe_write_cell(ws, 'F7', data.get('end_time', ''))
+        safe_write_cell(ws, 'D7', data.get('end_date', '09/10/2026'))
+        safe_write_cell(ws, 'F7', data.get('end_time', '08:00PM'))
         
         # Row 8: Tower Type and Brief Description
         safe_write_cell(ws, 'B8', data.get('tower_type', 'ground base'))
         safe_write_cell(ws, 'E8', data.get('brief_description', 'SFP link upgrade, Survey'))
         
         # ============================================
+        # WORK DETAILS - High Risk Selection
+        # ============================================
+        high_risk = data.get('high_risk', 'NO')
+        safe_write_cell(ws, 'B12', high_risk)  # YES/NO selection
+        
+        # Work at Heights checkboxes (put X in the cell)
+        if data.get('work_at_heights', False):
+            safe_write_cell(ws, 'C12', 'X')
+        if data.get('scaffold', False):
+            safe_write_cell(ws, 'D12', 'X')
+        if data.get('ladder', False):
+            safe_write_cell(ws, 'E12', 'X')
+        if data.get('tower', False):
+            safe_write_cell(ws, 'F12', 'X')
+        
+        # Certifications
+        safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
+        safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
+        safe_write_cell(ws, 'C14', 'X' if data.get('scaffold_components', False) else '')
+        safe_write_cell(ws, 'E14', 'X' if data.get('workers_fit', False) else '')
+        
+        # Electrical Works
+        safe_write_cell(ws, 'C16', 'X' if data.get('electrical_works', False) else '')
+        safe_write_cell(ws, 'C17', data.get('electrician_cert', ''))
+        safe_write_cell(ws, 'C18', 'X' if data.get('loto_device', False) else '')
+        safe_write_cell(ws, 'E18', 'X' if data.get('insulated_tools', False) else '')
+        
+        # Heavy Lifting
+        safe_write_cell(ws, 'C20', data.get('operator_cert', ''))
+        safe_write_cell(ws, 'D20', data.get('rigger_cert', ''))
+        safe_write_cell(ws, 'C21', data.get('heavy_eqpt_cert', ''))
+        
+        # Confined Space
+        safe_write_cell(ws, 'C23', 'X' if data.get('confined_space', False) else '')
+        safe_write_cell(ws, 'C24', data.get('scba_cert', ''))
+        safe_write_cell(ws, 'D24', data.get('ventilation_eqpt', ''))
+        safe_write_cell(ws, 'C25', 'X' if data.get('flash_arrester', False) else '')
+        safe_write_cell(ws, 'E25', 'X' if data.get('fire_blanket', False) else '')
+        safe_write_cell(ws, 'C26', data.get('o2_detector', ''))
+        safe_write_cell(ws, 'D26', data.get('safety_line', ''))
+        
+        # Harmful Substances
+        harmful = data.get('harmful_substance', 'NO')
+        safe_write_cell(ws, 'B28', harmful)
+        if harmful == 'YES':
+            safe_write_cell(ws, 'C29', 'X' if data.get('fumes', False) else '')
+            safe_write_cell(ws, 'D29', 'X' if data.get('odors', False) else '')
+            safe_write_cell(ws, 'C30', 'X' if data.get('dust', False) else '')
+            safe_write_cell(ws, 'D30', 'X' if data.get('noise', False) else '')
+            safe_write_cell(ws, 'C31', 'X' if data.get('sparks', False) else '')
+            safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
+        
+        # Utility Interruption
+        utility = data.get('utility_interruption', 'NO')
+        safe_write_cell(ws, 'B33', utility)
+        if utility == 'YES':
+            safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
+        
+        # Waste Generation
+        waste = data.get('waste_generation', 'NO')
+        safe_write_cell(ws, 'B37', waste)
+        if waste == 'YES':
+            safe_write_cell(ws, 'C37', data.get('waste_list', ''))
+        
+        # ============================================
         # JOB HAZARD ASSESSMENT (Top section)
         # ============================================
-        # Row 3: JHA Step 1
         safe_write_cell(ws, 'G3', data.get('jha_step1', ''))
         safe_write_cell(ws, 'H3', data.get('jha_hazard1', ''))
         safe_write_cell(ws, 'I3', data.get('jha_control1', ''))
-        
-        # Row 5: JHA Step 2
         safe_write_cell(ws, 'G5', data.get('jha_step2', ''))
         safe_write_cell(ws, 'H5', data.get('jha_hazard2', ''))
         safe_write_cell(ws, 'I5', data.get('jha_control2', ''))
@@ -107,15 +172,13 @@ def create_excel_template(data):
         # ============================================
         # SITE LOCATIONS - Multiple Sites
         # ============================================
-        # These are in columns J-M (Site ID, Anchor ID, Safety Officer, Project In-Charge)
         sites = data.get('sites', [])
-        site_row_start = 3  # Row 3 is where site data starts in the template
+        site_row_start = 3
         
         for i, site in enumerate(sites):
-            if i >= 10:  # Limit to 10 sites
+            if i >= 10:
                 break
             row = site_row_start + i
-            # Check if we need to clear previous data first
             safe_write_cell(ws, f'J{row}', site.get('site_id', ''))
             safe_write_cell(ws, f'K{row}', site.get('anchor_id', ''))
             safe_write_cell(ws, f'L{row}', site.get('safety_officer', data.get('safety_officer', 'Ronnie Alvin Chiu')))
@@ -126,7 +189,7 @@ def create_excel_template(data):
         # JOB HAZARD ASSESSMENT (Bottom table)
         # ============================================
         jha_steps = data.get('jha_steps', [])
-        row_start = 48  # Starting row for JHA table
+        row_start = 48
         
         for i, step in enumerate(jha_steps):
             if i >= 10:
@@ -137,14 +200,28 @@ def create_excel_template(data):
             safe_write_cell(ws, f'D{row}', step.get('controls', ''))
         
         # ============================================
-        # LIST OF WORKERS
+        # REQUIRED PPE - Mark with X
+        # ============================================
+        ppe_required = data.get('ppe_required', [])
+        safe_write_cell(ws, 'B42', 'X' if 'Safety Shoes' in ppe_required else '')
+        safe_write_cell(ws, 'C42', 'X' if 'Hardhat' in ppe_required else '')
+        safe_write_cell(ws, 'D42', 'X' if 'Body Harness' in ppe_required else '')
+        safe_write_cell(ws, 'E42', 'X' if 'Gloves' in ppe_required else '')
+        safe_write_cell(ws, 'B43', 'X' if 'Welding Mask' in ppe_required else '')
+        safe_write_cell(ws, 'C43', 'X' if 'N95 Masks' in ppe_required else '')
+        safe_write_cell(ws, 'D43', 'X' if 'Goggles' in ppe_required else '')
+        
+        if 'Other PPE' in ppe_required:
+            safe_write_cell(ws, 'E43', data.get('other_ppe_text', ''))
+        
+        # ============================================
+        # LIST OF WORKERS (Two columns: A and B)
         # ============================================
         workers = data.get('workers', [])
-        worker_row_start = 44  # Starting row for workers list
+        worker_row_start = 44
         
-        # Split workers into two columns (A and B) like in the template
         for i, worker in enumerate(workers):
-            if i >= 16:  # Limit to 16 workers (8 per column)
+            if i >= 16:  # 8 rows x 2 columns
                 break
             row = worker_row_start + (i // 2)
             col = 'A' if i % 2 == 0 else 'B'
@@ -155,14 +232,8 @@ def create_excel_template(data):
         # ============================================
         safe_write_cell(ws, 'B51', data.get('prepared_by', 'RONNIE ALVIN-CHIU'))
         safe_write_cell(ws, 'C51', data.get('noted_by', 'John Carlo Rabanes'))
-        
-        # Approved status - check if YES or NO
-        approved = data.get('approved_status', 'YES')
-        if approved == 'YES':
-            safe_write_cell(ws, 'E52', 'X')  # Mark YES
-        else:
-            safe_write_cell(ws, 'F52', 'X')  # Mark NO
-            
+        safe_write_cell(ws, 'E52', 'X' if data.get('approved_status') == 'YES' else '')
+        safe_write_cell(ws, 'F52', 'X' if data.get('approved_status') == 'NO' else '')
         safe_write_cell(ws, 'G52', data.get('safety_officer_approval', 'PTG MIDC O&M Regional Manager'))
         
         # ============================================
@@ -204,9 +275,8 @@ def main():
     with col1:
         st.subheader("📋 Project Details")
         
-        # Based on your template
-        sub_contractor = st.text_input("Name of Sub Contractor", value="DNA")
-        requesting_vendor = st.text_input("Requesting Vendor", value="NOKIA")
+        sub_contractor = st.text_input("Name of Sub Contractor", value="Ultegra Supplies and Services")
+        requesting_vendor = st.text_input("Requesting Vendor", value="NOKIA SHANGHAI BELL")
         project_in_charge = st.text_input("Project In-Charge", value="")
         person_in_charge = st.text_input("Person In-charge", value="John Carlo Rabanes")
         safety_officer = st.text_input("Project Safety Officer", value="RONNIE ALVIN CHIU")
@@ -225,6 +295,89 @@ def main():
             end_date = st.date_input("End Date", value=datetime(2026, 9, 10))
             end_time = st.text_input("End Time", value="08:00PM")
         
+        st.subheader("🛠️ Work Details")
+        
+        high_risk = st.radio("Is work to be done with high risk?", ["NO", "YES"])
+        
+        if high_risk == "YES":
+            with st.expander("Work at Heights", expanded=True):
+                col_wh1, col_wh2 = st.columns(2)
+                with col_wh1:
+                    work_at_heights = st.checkbox("Work at Heights")
+                    scaffold = st.checkbox("Scaffold")
+                    scaffold_cert = st.text_input("NCII Cert of Scaffold Erector")
+                with col_wh2:
+                    ladder = st.checkbox("Ladder")
+                    tower = st.checkbox("Tower")
+                    wah_rigger_cert = st.text_input("WAH Rigger Certificate")
+                
+                scaffold_components = st.checkbox("Scaffold components available")
+                workers_fit = st.checkbox("Workers physically fit")
+            
+            with st.expander("Electrical Works", expanded=True):
+                electrical_works = st.checkbox("Electrical Works")
+                electrician_cert = st.text_input("NCII Cert of Electrician or ID of REE/RME")
+                loto_device = st.checkbox("LOTO Device")
+                insulated_tools = st.checkbox("Insulated Tools")
+            
+            with st.expander("Heavy Lifting / Excavation", expanded=True):
+                operator_cert = st.text_input("NCII Cert of Operator")
+                rigger_cert = st.text_input("Cert of Lift Rigger")
+                heavy_eqpt_cert = st.text_input("3rd Party Certification of Heavy Eqpt")
+            
+            with st.expander("Confined Space Works", expanded=True):
+                confined_space = st.checkbox("Confined Space Works")
+                col_cs1, col_cs2 = st.columns(2)
+                with col_cs1:
+                    scba_cert = st.text_input("Certificate of SCBA Operator")
+                    ventilation_eqpt = st.text_input("Ventilation Equipment")
+                    flash_arrester = st.checkbox("OxyFuel flash back arrester installed")
+                with col_cs2:
+                    fire_blanket = st.checkbox("Fire Blanket")
+                    o2_detector = st.text_input("O2 and Gas Detector")
+                    safety_line = st.text_input("Safety Line")
+            
+            with st.expander("Harmful Substances", expanded=True):
+                harmful_substance = st.radio("Is there any harmful substance or nuisance release?", ["NO", "YES"])
+                if harmful_substance == "YES":
+                    col_h1, col_h2 = st.columns(2)
+                    with col_h1:
+                        fumes = st.checkbox("Fumes")
+                        dust = st.checkbox("Dust")
+                        sparks = st.checkbox("Sparks")
+                    with col_h2:
+                        odors = st.checkbox("Offensive Odors")
+                        noise = st.checkbox("Noise")
+                        other_harmful = st.text_input("Others:")
+            
+            with st.expander("Utility Interruption", expanded=True):
+                utility_interruption = st.radio("Will there be Utility interruption?", ["NO", "YES", "N/A"])
+                if utility_interruption == "YES":
+                    affected_utilities = st.text_area("Specify affected utilities and affected areas")
+        else:
+            work_at_heights = scaffold = ladder = tower = False
+            scaffold_cert = wah_rigger_cert = ""
+            scaffold_components = workers_fit = False
+            electrical_works = False
+            electrician_cert = loto_device = insulated_tools = ""
+            operator_cert = rigger_cert = heavy_eqpt_cert = ""
+            confined_space = False
+            scba_cert = ventilation_eqpt = flash_arrester = fire_blanket = ""
+            o2_detector = safety_line = ""
+            harmful_substance = "NO"
+            fumes = odors = dust = noise = sparks = False
+            other_harmful = ""
+            utility_interruption = "NO"
+            affected_utilities = ""
+        
+        # Waste Generation
+        st.subheader("♻️ Waste Generation")
+        waste_generation = st.radio("Will there be waste generation?", ["NO", "YES"])
+        waste_list = ""
+        if waste_generation == "YES":
+            waste_list = st.text_area("Identify and list possible waste generated", 
+                                     value="Cable scraps\nPackaging materials\nUsed PPE", height=80)
+        
         st.subheader("📌 JOB HAZARD ASSESSMENT (Top Section)")
         
         jha_step1 = st.text_input("Job Step 1", value="")
@@ -239,26 +392,22 @@ def main():
         st.subheader("📍 Site Locations")
         st.info("Add site locations with worker designations")
         
-        # Site locations table
         num_sites = st.number_input("Number of sites", min_value=0, max_value=10, value=2)
         
         sites = []
-        site_headers = ['Site ID', 'Anchor ID/PLA No.', 'Safety Officer', 'Project In-Charge', 'Name of Worker/Designation']
-        
-        # Create columns for site data
         for i in range(num_sites):
             with st.expander(f"Site {i+1}", expanded=i==0):
-                col_s1, col_s2, col_s3 = st.columns(3)
+                col_s1, col_s2 = st.columns(2)
                 with col_s1:
                     site_id = st.text_input(f"Site ID {i+1}", value="MIN624" if i==0 else "MIN779")
                     safety_officer_site = st.text_input(f"Safety Officer {i+1}", value="Ronnie Alvin Chiu")
                 with col_s2:
                     anchor_id = st.text_input(f"Anchor ID/PLA No. {i+1}", value="")
                     project_in_charge_site = st.text_input(f"Project In-Charge {i+1}", value="John Carlo Rabanes")
-                with col_s3:
-                    worker_name = st.text_area(f"Worker Name/Designation {i+1}", 
-                                              value="RABANES, JOHN CARLO/ OLT ENGINEER" if i==0 else "Sabordo, Walrich/ Field Engineer", 
-                                              height=80)
+                
+                worker_name = st.text_area(f"Worker Name/Designation {i+1}", 
+                                          value="RABANES, JOHN CARLO/ OLT ENGINEER" if i==0 else "Sabordo, Walrich/ Field Engineer", 
+                                          height=80)
                 
                 sites.append({
                     'site_id': site_id,
@@ -284,6 +433,13 @@ def main():
                         'hazard': hazard,
                         'controls': controls
                     })
+        
+        st.subheader("🦺 Required PPE")
+        ppe_options = ['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves', 'Welding Mask', 'N95 Masks', 'Goggles', 'Other PPE']
+        ppe_required = st.multiselect("Select required PPE", ppe_options)
+        other_ppe_text = ""
+        if 'Other PPE' in ppe_required:
+            other_ppe_text = st.text_input("Other PPE details")
         
         st.subheader("👷 List of Workers")
         workers_text = st.text_area("List workers (one per line)",
@@ -313,6 +469,40 @@ def main():
         'start_time': start_time,
         'end_time': end_time,
         'brief_description': brief_description,
+        'high_risk': high_risk,
+        'work_at_heights': locals().get('work_at_heights', False),
+        'scaffold': locals().get('scaffold', False),
+        'ladder': locals().get('ladder', False),
+        'tower': locals().get('tower', False),
+        'scaffold_cert': locals().get('scaffold_cert', ''),
+        'wah_rigger_cert': locals().get('wah_rigger_cert', ''),
+        'scaffold_components': locals().get('scaffold_components', False),
+        'workers_fit': locals().get('workers_fit', False),
+        'electrical_works': locals().get('electrical_works', False),
+        'electrician_cert': locals().get('electrician_cert', ''),
+        'loto_device': locals().get('loto_device', False),
+        'insulated_tools': locals().get('insulated_tools', False),
+        'operator_cert': locals().get('operator_cert', ''),
+        'rigger_cert': locals().get('rigger_cert', ''),
+        'heavy_eqpt_cert': locals().get('heavy_eqpt_cert', ''),
+        'confined_space': locals().get('confined_space', False),
+        'scba_cert': locals().get('scba_cert', ''),
+        'ventilation_eqpt': locals().get('ventilation_eqpt', ''),
+        'flash_arrester': locals().get('flash_arrester', False),
+        'fire_blanket': locals().get('fire_blanket', False),
+        'o2_detector': locals().get('o2_detector', ''),
+        'safety_line': locals().get('safety_line', ''),
+        'harmful_substance': locals().get('harmful_substance', 'NO'),
+        'fumes': locals().get('fumes', False),
+        'odors': locals().get('odors', False),
+        'dust': locals().get('dust', False),
+        'noise': locals().get('noise', False),
+        'sparks': locals().get('sparks', False),
+        'other_harmful': locals().get('other_harmful', ''),
+        'utility_interruption': locals().get('utility_interruption', 'NO'),
+        'affected_utilities': locals().get('affected_utilities', ''),
+        'waste_generation': waste_generation,
+        'waste_list': waste_list,
         'jha_step1': jha_step1,
         'jha_hazard1': jha_hazard1,
         'jha_control1': jha_control1,
@@ -321,6 +511,8 @@ def main():
         'jha_control2': jha_control2,
         'sites': sites,
         'jha_steps': jha_steps,
+        'ppe_required': ppe_required,
+        'other_ppe_text': other_ppe_text,
         'workers': workers,
         'prepared_by': prepared_by,
         'noted_by': noted_by,
@@ -329,6 +521,15 @@ def main():
     }
     
     st.markdown("---")
+    
+    # Important notice
+    st.warning("""
+    ⚠️ **Important Note:** 
+    - The **logo** and **form control checkboxes** cannot be preserved by openpyxl
+    - This tool uses **'X' marks in cells** instead of interactive checkboxes
+    - The logo will need to be re-added manually in Excel after download
+    - All other formatting and merged cells are preserved
+    """)
     
     # Generate Excel button
     if st.button("📥 Generate Excel File", type="primary"):
@@ -348,6 +549,7 @@ def main():
                             'Location': work_location,
                             'Sub Contractor': sub_contractor,
                             'Safety Officer': safety_officer,
+                            'High Risk': high_risk,
                             'Sites': len(sites),
                             'JHA Entries': len(jha_steps),
                             'Workers': len(workers)
@@ -367,27 +569,27 @@ def main():
         1. Fill in project details
         2. Add site locations with worker designations
         3. Add JHA entries as needed
-        4. List all workers
-        5. Click 'Generate Excel File'
-        6. Download the completed file
+        4. Select required PPE
+        5. List all workers
+        6. Click 'Generate Excel File'
+        7. Download the completed file
         """)
         
-        st.header("📋 Template Requirements")
+        st.header("⚠️ Limitations")
         st.markdown("""
-        - Template file: `HSWP_template.xlsx`
-        - Must be in the repository root
-        - Original template is preserved
-        - Only specified fields are modified
+        Due to openpyxl limitations:
+        - **Logo**: Will be removed, re-add manually
+        - **Checkboxes**: Replaced with 'X' marks
+        - All other formatting is preserved
         """)
         
-        st.header("📌 Modified Fields")
+        st.header("📌 Quick Fix for Logo")
         st.markdown("""
-        - Project Details (all fields)
-        - JHA Assessment (top section)
-        - Site Locations (with worker designations)
-        - JHA Table (bottom section)
-        - List of Workers (two columns)
-        - Acknowledgement section
+        After downloading:
+        1. Open the file in Excel
+        2. Go to Insert > Pictures
+        3. Add your company logo
+        4. Position it in the header
         """)
 
 if __name__ == "__main__":
