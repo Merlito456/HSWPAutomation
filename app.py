@@ -3,12 +3,10 @@ import pandas as pd
 from datetime import datetime
 import io
 import base64
-from openpyxl import load_workbook, Workbook
+from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
-import os
-import shutil
-import tempfile
+from openpyxl.worksheet.worksheet import Worksheet
 
 # Set page configuration
 st.set_page_config(
@@ -20,239 +18,424 @@ st.set_page_config(
 st.title("🛡️ Health and Safety Work Permit Automation")
 st.markdown("---")
 
-def create_excel_template(data):
-    """Create Excel file with proper formatting"""
-    
-    template_path = 'HSWP_template.xlsx'
-    if not os.path.exists(template_path):
-        st.error("⚠️ Template file 'HSWP_template.xlsx' not found!")
-        return None
+def create_checkbox(value):
+    """Return checkbox character"""
+    return "☑" if value else "☐"
+
+def create_excel_file(data):
+    """Create a clean Excel file from scratch"""
     
     try:
-        # Create a temporary copy
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-            shutil.copy2(template_path, tmp_file.name)
-            temp_template_path = tmp_file.name
-        
-        # Load the template WITHOUT modifying it
-        wb = load_workbook(temp_template_path)
+        wb = Workbook()
         ws = wb.active
+        ws.title = "Work Permit"
         
-        # Define a function to safely write to cells
-        def write_cell(row, col, value):
-            try:
-                ws.cell(row=row, column=col, value=value)
-            except:
-                pass
+        # Define styles
+        header_font = Font(name='Arial', size=14, bold=True)
+        title_font = Font(name='Arial', size=12, bold=True)
+        label_font = Font(name='Arial', size=10, bold=True)
+        normal_font = Font(name='Arial', size=10)
+        center_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        left_alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
+        
+        # Borders
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Set column widths
+        ws.column_dimensions['A'].width = 30
+        ws.column_dimensions['B'].width = 20
+        ws.column_dimensions['C'].width = 20
+        ws.column_dimensions['D'].width = 20
+        ws.column_dimensions['E'].width = 20
+        ws.column_dimensions['F'].width = 20
+        ws.column_dimensions['G'].width = 20
+        ws.column_dimensions['H'].width = 20
+        ws.column_dimensions['I'].width = 20
+        ws.column_dimensions['J'].width = 20
+        ws.column_dimensions['K'].width = 20
+        ws.column_dimensions['L'].width = 20
+        ws.column_dimensions['M'].width = 20
+        ws.column_dimensions['N'].width = 25
+        
+        row = 1
         
         # ============================================
-        # PROJECT DETAILS - Row numbers from template
+        # HEADER
         # ============================================
-        # Row 2: Sub Contractor (B2) and Requesting Vendor (D2)
-        write_cell(2, 2, data.get('sub_contractor', 'Ultegra Supplies and Services'))
-        write_cell(2, 4, data.get('requesting_vendor', 'NOKIA SHANGHAI BELL'))
+        ws.merge_cells(f'A{row}:F{row}')
+        cell = ws.cell(row=row, column=1, value="HEALTH and SAFETY WORK PERMIT")
+        cell.font = header_font
+        cell.alignment = center_alignment
+        row += 1
         
-        # Row 4: Project In-Charge (B4) and Person In-charge (D4)
-        write_cell(4, 2, data.get('project_in_charge', ''))
-        write_cell(4, 4, data.get('person_in_charge', 'John Carlo Rabanes'))
+        ws.merge_cells(f'A{row}:F{row}')
+        cell = ws.cell(row=row, column=1, value="NOKIA SHANGHAI BELL")
+        cell.font = header_font
+        cell.alignment = center_alignment
+        row += 1
         
-        # Row 5: Safety Officer (B5), Work Schedule (D5), Work Time Period (F5)
-        write_cell(5, 2, data.get('safety_officer', 'RONNIE ALVIN CHIU'))
-        write_cell(5, 4, data.get('work_schedule', ''))
-        write_cell(5, 6, data.get('work_time_period', ''))
+        # ============================================
+        # PROJECT DETAILS
+        # ============================================
+        row += 1
+        ws.merge_cells(f'A{row}:F{row}')
+        cell = ws.cell(row=row, column=1, value="PROJECT DETAILS")
+        cell.font = title_font
+        cell.alignment = center_alignment
+        row += 1
         
-        # Row 6: Project Name (B6), Start Date (D6), Start Time (F6)
-        write_cell(6, 2, data.get('project_name', 'FTTH HORIZONTAL'))
-        write_cell(6, 4, data.get('start_date', '08/10/2026'))
-        write_cell(6, 6, data.get('start_time', '08:00AM'))
+        # Row: Sub Contractor
+        ws.cell(row=row, column=1, value="Name of Sub Contractor").font = label_font
+        ws.cell(row=row, column=2, value=data.get('sub_contractor', 'Ultegra Supplies and Services'))
+        ws.cell(row=row, column=4, value="Requesting Vendor").font = label_font
+        ws.cell(row=row, column=5, value=data.get('requesting_vendor', 'NOKIA SHANGHAI BELL'))
+        row += 1
         
-        # Row 7: Work Location (B7), End Date (D7), End Time (F7)
-        write_cell(7, 2, data.get('work_location', 'MIN624_TS ORAPOBBUTUANAGN'))
-        write_cell(7, 4, data.get('end_date', '09/10/2026'))
-        write_cell(7, 6, data.get('end_time', '08:00PM'))
+        # Row: Project In-Charge
+        ws.cell(row=row, column=1, value="Project In-Charge").font = label_font
+        ws.cell(row=row, column=2, value=data.get('project_in_charge', ''))
+        ws.cell(row=row, column=4, value="Person In-charge").font = label_font
+        ws.cell(row=row, column=5, value=data.get('person_in_charge', 'John Carlo Rabanes'))
+        row += 1
         
-        # Row 8: Tower Type (B8), Brief Description (E8)
-        write_cell(8, 2, data.get('tower_type', 'ground base'))
-        write_cell(8, 5, data.get('brief_description', 'SFP link upgrade, Survey'))
+        # Row: Safety Officer
+        ws.cell(row=row, column=1, value="Project Safety Officer").font = label_font
+        ws.cell(row=row, column=2, value=data.get('safety_officer', 'RONNIE ALVIN CHIU'))
+        ws.cell(row=row, column=4, value="Work Schedule").font = label_font
+        ws.cell(row=row, column=5, value=data.get('work_schedule', ''))
+        ws.cell(row=row, column=6, value="Work Time Period").font = label_font
+        ws.cell(row=row, column=7, value=data.get('work_time_period', ''))
+        row += 1
+        
+        # Row: Project Name / Start Date / Start Time
+        ws.cell(row=row, column=1, value="Project Name").font = label_font
+        ws.cell(row=row, column=2, value=data.get('project_name', 'FTTH HORIZONTAL'))
+        ws.cell(row=row, column=4, value="Start Date").font = label_font
+        ws.cell(row=row, column=5, value=data.get('start_date', '08/10/2026'))
+        ws.cell(row=row, column=6, value="Start Time").font = label_font
+        ws.cell(row=row, column=7, value=data.get('start_time', '08:00AM'))
+        row += 1
+        
+        # Row: Work Location / End Date / End Time
+        ws.cell(row=row, column=1, value="Work Location").font = label_font
+        ws.cell(row=row, column=2, value=data.get('work_location', 'MIN624_TS ORAPOBBUTUANAGN'))
+        ws.cell(row=row, column=4, value="End Date").font = label_font
+        ws.cell(row=row, column=5, value=data.get('end_date', '09/10/2026'))
+        ws.cell(row=row, column=6, value="End Time").font = label_font
+        ws.cell(row=row, column=7, value=data.get('end_time', '08:00PM'))
+        row += 1
+        
+        # Row: Tower Type / Brief Description
+        ws.cell(row=row, column=1, value="Tower Type").font = label_font
+        ws.cell(row=row, column=2, value=data.get('tower_type', 'ground base'))
+        ws.cell(row=row, column=4, value="Brief Description of Work").font = label_font
+        ws.merge_cells(f'E{row}:G{row}')
+        ws.cell(row=row, column=5, value=data.get('brief_description', 'SFP link upgrade, Survey'))
+        row += 2
         
         # ============================================
         # WORK DETAILS
         # ============================================
-        # High Risk - Row 12
+        ws.merge_cells(f'A{row}:G{row}')
+        cell = ws.cell(row=row, column=1, value="WORK DETAILS")
+        cell.font = title_font
+        cell.alignment = center_alignment
+        row += 1
+        
+        # High Risk
         high_risk = data.get('high_risk', 'NO')
-        write_cell(12, 2, high_risk)  # Column B
+        ws.cell(row=row, column=1, value="Is work to be done with high risk?").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(high_risk == 'YES'))
+        ws.cell(row=row, column=3, value="YES")
+        ws.cell(row=row, column=4, value=create_checkbox(high_risk == 'NO'))
+        ws.cell(row=row, column=5, value="NO")
+        row += 1
         
-        # Work at Heights - Row 12
-        write_cell(12, 3, 'X' if data.get('work_at_heights', False) else '')
-        write_cell(12, 4, 'X' if data.get('scaffold', False) else '')
-        write_cell(12, 5, 'X' if data.get('ladder', False) else '')
-        write_cell(12, 6, 'X' if data.get('tower', False) else '')
+        # Work at Heights
+        ws.cell(row=row, column=1, value="Work at Heights").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('work_at_heights', False)))
         
-        # Row 13: Certifications
-        write_cell(13, 3, data.get('scaffold_cert', ''))
-        write_cell(13, 5, data.get('wah_rigger_cert', ''))
+        if data.get('work_at_heights', False):
+            ws.cell(row=row, column=3, value="scaffold")
+            ws.cell(row=row, column=4, value=create_checkbox(data.get('scaffold', False)))
+            ws.cell(row=row, column=5, value="ladder")
+            ws.cell(row=row, column=6, value=create_checkbox(data.get('ladder', False)))
+            ws.cell(row=row, column=7, value="tower")
+            ws.cell(row=row, column=8, value=create_checkbox(data.get('tower', False)))
+        row += 1
         
-        # Row 14: Scaffold components and Workers fit
-        write_cell(14, 3, 'X' if data.get('scaffold_components', False) else '')
-        write_cell(14, 5, 'X' if data.get('workers_fit', False) else '')
+        # Certifications
+        ws.cell(row=row, column=1, value="NCII Cert of Scaffold Erector").font = label_font
+        ws.cell(row=row, column=2, value=data.get('scaffold_cert', ''))
+        ws.cell(row=row, column=4, value="WAH Rigger Certificate").font = label_font
+        ws.cell(row=row, column=5, value=data.get('wah_rigger_cert', ''))
+        row += 1
         
-        # Row 16: Electrical Works
-        write_cell(16, 3, 'X' if data.get('electrical_works', False) else '')
+        ws.cell(row=row, column=1, value="Scaffold components available").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('scaffold_components', False)))
+        ws.cell(row=row, column=4, value="Workers physically fit").font = label_font
+        ws.cell(row=row, column=5, value=create_checkbox(data.get('workers_fit', False)))
+        row += 1
         
-        # Row 17: Electrician Cert
-        write_cell(17, 3, data.get('electrician_cert', ''))
+        # Electrical Works
+        ws.cell(row=row, column=1, value="Electrical Works").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('electrical_works', False)))
+        row += 1
         
-        # Row 18: LOTO and Insulated Tools
-        write_cell(18, 3, 'X' if data.get('loto_device', False) else '')
-        write_cell(18, 5, 'X' if data.get('insulated_tools', False) else '')
+        ws.cell(row=row, column=1, value="NCII Cert of Electrician or ID of REE/RME").font = label_font
+        ws.cell(row=row, column=2, value=data.get('electrician_cert', ''))
+        row += 1
         
-        # Row 20: Heavy Lifting
-        write_cell(20, 3, data.get('operator_cert', ''))
-        write_cell(20, 4, data.get('rigger_cert', ''))
+        ws.cell(row=row, column=1, value="LOTO Device").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('loto_device', False)))
+        ws.cell(row=row, column=3, value="Insulated Tools").font = label_font
+        ws.cell(row=row, column=4, value=create_checkbox(data.get('insulated_tools', False)))
+        row += 1
         
-        # Row 21: Heavy Equipment Cert
-        write_cell(21, 3, data.get('heavy_eqpt_cert', ''))
+        # Heavy Lifting
+        ws.cell(row=row, column=1, value="Heavy Lifting w/ Equipment /Excavation Works").font = label_font
+        row += 1
         
-        # Row 23: Confined Space
-        write_cell(23, 3, 'X' if data.get('confined_space', False) else '')
+        ws.cell(row=row, column=1, value="NCII Cert of Operator").font = label_font
+        ws.cell(row=row, column=2, value=data.get('operator_cert', ''))
+        ws.cell(row=row, column=3, value="Cert of Lift Rigger").font = label_font
+        ws.cell(row=row, column=4, value=data.get('rigger_cert', ''))
+        row += 1
         
-        # Row 24: SCBA and Ventilation
-        write_cell(24, 3, data.get('scba_cert', ''))
-        write_cell(24, 4, data.get('ventilation_eqpt', ''))
+        ws.cell(row=row, column=1, value="3rd Party Certification of Heavy Eqpt").font = label_font
+        ws.cell(row=row, column=2, value=data.get('heavy_eqpt_cert', ''))
+        row += 1
         
-        # Row 25: Flash Arrester and Fire Blanket
-        write_cell(25, 3, 'X' if data.get('flash_arrester', False) else '')
-        write_cell(25, 5, 'X' if data.get('fire_blanket', False) else '')
+        # Confined Space
+        ws.cell(row=row, column=1, value="Confined Space Works").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('confined_space', False)))
+        row += 1
         
-        # Row 26: O2 Detector and Safety Line
-        write_cell(26, 3, data.get('o2_detector', ''))
-        write_cell(26, 4, data.get('safety_line', ''))
+        ws.cell(row=row, column=1, value="Certificate of SCBA Operator").font = label_font
+        ws.cell(row=row, column=2, value=data.get('scba_cert', ''))
+        ws.cell(row=row, column=3, value="Ventilation Equipment").font = label_font
+        ws.cell(row=row, column=4, value=data.get('ventilation_eqpt', ''))
+        row += 1
         
-        # ============================================
-        # HARMFUL SUBSTANCES - Row 28-31
-        # ============================================
+        ws.cell(row=row, column=1, value="OxyFuel flash back arrester installed").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(data.get('flash_arrester', False)))
+        ws.cell(row=row, column=3, value="Fire Blanket").font = label_font
+        ws.cell(row=row, column=4, value=create_checkbox(data.get('fire_blanket', False)))
+        row += 1
+        
+        ws.cell(row=row, column=1, value="O2 and Gas Detector").font = label_font
+        ws.cell(row=row, column=2, value=data.get('o2_detector', ''))
+        ws.cell(row=row, column=3, value="Safety Line").font = label_font
+        ws.cell(row=row, column=4, value=data.get('safety_line', ''))
+        row += 1
+        
+        # Harmful Substances
         harmful = data.get('harmful_substance', 'NO')
-        write_cell(28, 2, harmful)
+        ws.cell(row=row, column=1, value="Is there any harmful substance or nuisance release?").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(harmful == 'YES'))
+        ws.cell(row=row, column=3, value="YES")
+        ws.cell(row=row, column=4, value=create_checkbox(harmful == 'NO'))
+        ws.cell(row=row, column=5, value="NO")
+        row += 1
         
         if harmful == 'YES':
-            write_cell(29, 3, 'X' if data.get('fumes', False) else '')
-            write_cell(29, 4, 'X' if data.get('odors', False) else '')
-            write_cell(30, 3, 'X' if data.get('dust', False) else '')
-            write_cell(30, 4, 'X' if data.get('noise', False) else '')
-            write_cell(31, 3, 'X' if data.get('sparks', False) else '')
-            write_cell(31, 4, data.get('other_harmful', ''))
+            ws.cell(row=row, column=1, value="Fumes").font = label_font
+            ws.cell(row=row, column=2, value=create_checkbox(data.get('fumes', False)))
+            ws.cell(row=row, column=3, value="Offensive Odors").font = label_font
+            ws.cell(row=row, column=4, value=create_checkbox(data.get('odors', False)))
+            row += 1
+            
+            ws.cell(row=row, column=1, value="Dust").font = label_font
+            ws.cell(row=row, column=2, value=create_checkbox(data.get('dust', False)))
+            ws.cell(row=row, column=3, value="Noise").font = label_font
+            ws.cell(row=row, column=4, value=create_checkbox(data.get('noise', False)))
+            row += 1
+            
+            ws.cell(row=row, column=1, value="Sparks").font = label_font
+            ws.cell(row=row, column=2, value=create_checkbox(data.get('sparks', False)))
+            ws.cell(row=row, column=3, value="Others:").font = label_font
+            ws.cell(row=row, column=4, value=data.get('other_harmful', ''))
+            row += 1
         
-        # ============================================
-        # UTILITY INTERRUPTION - Row 33
-        # ============================================
+        # Utility Interruption
         utility = data.get('utility_interruption', 'NO')
-        write_cell(33, 2, utility)
+        ws.cell(row=row, column=1, value="Will there be Utility interruption?").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(utility == 'YES'))
+        ws.cell(row=row, column=3, value="YES")
+        ws.cell(row=row, column=4, value=create_checkbox(utility == 'NO'))
+        ws.cell(row=row, column=5, value="NO")
+        ws.cell(row=row, column=6, value=create_checkbox(utility == 'N/A'))
+        ws.cell(row=row, column=7, value="N/A")
+        row += 1
+        
         if utility == 'YES':
-            write_cell(34, 3, data.get('affected_utilities', ''))
+            ws.cell(row=row, column=1, value="Specify affected utilities and affected areas").font = label_font
+            ws.merge_cells(f'B{row}:G{row}')
+            ws.cell(row=row, column=2, value=data.get('affected_utilities', ''))
+            row += 1
         
-        # ============================================
-        # WASTE GENERATION - Row 37
-        # ============================================
+        # Waste Generation
         waste = data.get('waste_generation', 'NO')
-        write_cell(37, 2, waste)
+        ws.cell(row=row, column=1, value="Will there be waste generation?").font = label_font
+        ws.cell(row=row, column=2, value=create_checkbox(waste == 'YES'))
+        ws.cell(row=row, column=3, value="YES")
+        ws.cell(row=row, column=4, value=create_checkbox(waste == 'NO'))
+        ws.cell(row=row, column=5, value="NO")
+        row += 1
+        
         if waste == 'YES':
-            write_cell(37, 3, data.get('waste_list', ''))
+            ws.cell(row=row, column=1, value="Identify and list possible waste generated").font = label_font
+            ws.merge_cells(f'B{row}:G{row}')
+            ws.cell(row=row, column=2, value=data.get('waste_list', 'Boxes/Packaging materials of NOKIA equipments.'))
+            row += 1
+        
+        row += 1
         
         # ============================================
-        # JHA TOP SECTION - Rows 3 and 5
+        # TOOLS AND MATERIALS
         # ============================================
-        write_cell(3, 7, data.get('jha_step1', ''))
-        write_cell(3, 8, data.get('jha_hazard1', ''))
-        write_cell(3, 9, data.get('jha_control1', ''))
-        write_cell(5, 7, data.get('jha_step2', ''))
-        write_cell(5, 8, data.get('jha_hazard2', ''))
-        write_cell(5, 9, data.get('jha_control2', ''))
+        ws.cell(row=row, column=1, value="List of tools and materials to be used").font = title_font
+        row += 1
+        
+        tools = data.get('tools_materials', ['PPE', 'FIRST AID KIT', 'ODF', 'OPM', 'OTDR', 'Patchcord', 'Fusion Splicer', 'Cleaning Kit'])
+        for tool in tools:
+            ws.cell(row=row, column=1, value=tool)
+            row += 1
+        
+        row += 1
         
         # ============================================
-        # SITE LOCATIONS - Rows 3-12 (columns J-N)
+        # JOB HAZARD ASSESSMENT
         # ============================================
-        sites = data.get('sites', [])
-        for i, site in enumerate(sites):
-            if i >= 10:
-                break
-            row = 3 + i
-            write_cell(row, 10, site.get('site_id', ''))
-            write_cell(row, 11, site.get('anchor_id', ''))
-            write_cell(row, 12, site.get('safety_officer', data.get('safety_officer', 'Ronnie Alvin Chiu')))
-            write_cell(row, 13, site.get('project_in_charge', data.get('person_in_charge', 'John Carlo Rabanes')))
-            write_cell(row, 14, site.get('worker_name', ''))
+        ws.merge_cells(f'A{row}:G{row}')
+        cell = ws.cell(row=row, column=1, value="JOB HAZARD ASSESSMENT")
+        cell.font = title_font
+        cell.alignment = center_alignment
+        row += 1
         
-        # ============================================
-        # JHA BOTTOM TABLE - Starting row 48
-        # ============================================
+        # JHA Table Header
+        headers = ['Job Step', 'Hazard', '', 'Recommended Controls', '', '', '']
+        for col, header in enumerate(headers, 1):
+            cell = ws.cell(row=row, column=col, value=header)
+            cell.font = label_font
+            cell.alignment = center_alignment
+            cell.border = thin_border
+        row += 1
+        
+        # JHA Entries
         jha_steps = data.get('jha_steps', [])
-        for i, step in enumerate(jha_steps):
-            if i >= 10:
-                break
-            row = 48 + i
-            write_cell(row, 1, step.get('step', ''))
-            write_cell(row, 2, step.get('hazard', ''))
-            write_cell(row, 4, step.get('controls', ''))
+        if jha_steps:
+            for step in jha_steps:
+                ws.cell(row=row, column=1, value=step.get('step', '')).border = thin_border
+                ws.cell(row=row, column=2, value=step.get('hazard', '')).border = thin_border
+                ws.cell(row=row, column=4, value=step.get('controls', '')).border = thin_border
+                row += 1
+        else:
+            # Default JHA entries
+            default_jha = [
+                {'step': 'Site Access', 'hazard': 'Slip, trip, and fall from uneven surface', 'controls': 'Coordinate with lessor/UDI security prior to entry. Ensure all permits are on hand.'},
+                {'step': 'Prepare Work Area', 'hazard': 'Trips/Falls: Uneven surfaces, debris', 'controls': 'Clear work area of debris, ensure adequate lighting, wear safety shoes.'},
+                {'step': 'Handling Fiber Optic cables', 'hazard': 'Cuts/Lacerations: Sharp edges', 'controls': 'Wear cut-resistant gloves. Handle fibers with care.'}
+            ]
+            for step in default_jha:
+                ws.cell(row=row, column=1, value=step['step']).border = thin_border
+                ws.cell(row=row, column=2, value=step['hazard']).border = thin_border
+                ws.cell(row=row, column=4, value=step['controls']).border = thin_border
+                row += 1
+        
+        row += 1
         
         # ============================================
-        # PPE - Rows 42-43
+        # REQUIRED PPE
         # ============================================
-        ppe_required = data.get('ppe_required', [])
-        write_cell(42, 2, 'X' if 'Safety Shoes' in ppe_required else '')
-        write_cell(42, 3, 'X' if 'Hardhat' in ppe_required else '')
-        write_cell(42, 4, 'X' if 'Body Harness' in ppe_required else '')
-        write_cell(42, 5, 'X' if 'Gloves' in ppe_required else '')
-        write_cell(43, 2, 'X' if 'Welding Mask' in ppe_required else '')
-        write_cell(43, 3, 'X' if 'N95 Masks' in ppe_required else '')
-        write_cell(43, 4, 'X' if 'Goggles' in ppe_required else '')
+        ws.merge_cells(f'A{row}:E{row}')
+        cell = ws.cell(row=row, column=1, value="REQUIRED PPE")
+        cell.font = title_font
+        cell.alignment = center_alignment
+        row += 1
+        
+        ppe_required = data.get('ppe_required', ['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves'])
+        ppe_items = ['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves', 'Welding Mask', 'N95 Masks', 'Goggles', 'Other PPE']
+        
+        for i, ppe in enumerate(ppe_items[:4]):
+            col = get_column_letter(i + 1)
+            ws.cell(row=row, column=i+1, value=create_checkbox(ppe in ppe_required))
+            ws.cell(row=row+1, column=i+1, value=ppe).font = label_font
+        row += 2
+        
+        for i, ppe in enumerate(ppe_items[4:]):
+            col = get_column_letter(i + 1)
+            ws.cell(row=row, column=i+1, value=create_checkbox(ppe in ppe_required))
+            ws.cell(row=row+1, column=i+1, value=ppe).font = label_font
         
         if 'Other PPE' in ppe_required:
-            write_cell(43, 5, data.get('other_ppe_text', ''))
+            ws.cell(row=row+2, column=5, value=data.get('other_ppe_text', ''))
+        
+        row += 4
         
         # ============================================
-        # WORKERS - Starting row 44 (two columns)
+        # LIST OF WORKERS
         # ============================================
+        ws.cell(row=row, column=1, value="List of workers").font = title_font
+        row += 1
+        
         workers = data.get('workers', [])
-        for i, worker in enumerate(workers):
-            if i >= 16:
-                break
-            row = 44 + (i // 2)
+        for i, worker in enumerate(workers[:16]):
             col = 1 if i % 2 == 0 else 2
-            write_cell(row, col, worker)
+            if i % 2 == 0 and i > 0:
+                row += 1
+            ws.cell(row=row, column=col, value=worker)
+        row += 2
         
         # ============================================
-        # ACKNOWLEDGEMENT - Rows 51-52
+        # ACKNOWLEDGEMENT
         # ============================================
-        write_cell(51, 2, data.get('prepared_by', 'RONNIE ALVIN-CHIU'))
-        write_cell(51, 3, data.get('noted_by', 'John Carlo Rabanes'))
-        write_cell(51, 5, data.get('approved_by', ''))
-        write_cell(52, 3, data.get('noted_by', 'John Carlo Rabanes'))
-        write_cell(52, 5, 'X' if data.get('approved_status') == 'YES' else '')
-        write_cell(52, 6, 'X' if data.get('approved_status') == 'NO' else '')
-        write_cell(52, 7, data.get('safety_officer_approval', 'PTG MIDC O&M Regional Manager'))
+        ws.merge_cells(f'A{row}:G{row}')
+        cell = ws.cell(row=row, column=1, value="ACKNOWLEDGEMENT")
+        cell.font = title_font
+        cell.alignment = center_alignment
+        row += 1
+        
+        ws.cell(row=row, column=1, value="Prepared By:").font = label_font
+        ws.cell(row=row, column=2, value=data.get('prepared_by', 'RONNIE ALVIN-CHIU'))
+        ws.cell(row=row, column=3, value="Noted By").font = label_font
+        ws.cell(row=row, column=4, value=data.get('noted_by', 'John Carlo Rabanes'))
+        ws.cell(row=row, column=5, value="Approved By").font = label_font
+        row += 1
+        
+        ws.cell(row=row, column=1, value="Project Safety Officer")
+        ws.cell(row=row, column=2, value="MNO/Project In-Charge")
+        ws.cell(row=row, column=4, value=create_checkbox(data.get('approved_status') == 'YES'))
+        ws.cell(row=row, column=5, value="YES")
+        ws.cell(row=row, column=6, value=create_checkbox(data.get('approved_status') == 'NO'))
+        ws.cell(row=row, column=7, value="NO")
+        row += 1
+        
+        ws.cell(row=row, column=5, value=data.get('safety_officer_approval', 'PTG MIDC O&M Regional Manager'))
+        row += 2
         
         # ============================================
+        # FOOTER
+        # ============================================
+        ws.merge_cells(f'A{row}:G{row}')
+        cell = ws.cell(row=row, column=1, value="The Vendor/Contractor takes full ownership in ensuring the Health and Safety of its workers onsite by carefully assessing the activity. That the assigned Safety Officer and the Project In-Charge had identified the corresponding hazards and their appropriate safety controls. And all assigned personnel to this activity were made aware of their tasks, and the hazards and commits to carry out the safety controls. Any activity not included in the above scope will not be executed without a New Health and Safety Work Permit submitted.")
+        cell.alignment = left_alignment
+        cell.font = Font(name='Arial', size=9, italic=True)
+        
         # Save the workbook
-        # ============================================
-        wb.save(temp_template_path)
-        
-        # Read the saved file
-        with open(temp_template_path, 'rb') as f:
-            file_data = f.read()
-        
-        # Clean up
-        try:
-            os.unlink(temp_template_path)
-        except:
-            pass
-        
-        output = io.BytesIO(file_data)
+        output = io.BytesIO()
+        wb.save(output)
         output.seek(0)
         
         return output
         
     except Exception as e:
-        st.error(f"Error: {str(e)}")
+        st.error(f"Error creating Excel file: {str(e)}")
         import traceback
         st.error(traceback.format_exc())
         return None
@@ -371,48 +554,9 @@ def main():
         waste_list = ""
         if waste_generation == "YES":
             waste_list = st.text_area("Identify and list possible waste generated", 
-                                     value="Cable scraps\nPackaging materials\nUsed PPE", height=80)
+                                     value="Boxes/Packaging materials of NOKIA equipments.", height=80)
         
-        st.subheader("📌 JOB HAZARD ASSESSMENT (Top Section)")
-        
-        jha_step1 = st.text_input("Job Step 1", value="")
-        jha_hazard1 = st.text_input("Hazard 1", value="")
-        jha_control1 = st.text_area("Control 1", value="", height=60)
-        
-        jha_step2 = st.text_input("Job Step 2", value="")
-        jha_hazard2 = st.text_input("Hazard 2", value="")
-        jha_control2 = st.text_area("Control 2", value="", height=60)
-    
-    with col2:
-        st.subheader("📍 Site Locations")
-        st.info("Add site locations with worker designations")
-        
-        num_sites = st.number_input("Number of sites", min_value=0, max_value=10, value=2)
-        
-        sites = []
-        for i in range(num_sites):
-            with st.expander(f"Site {i+1}", expanded=i==0):
-                col_s1, col_s2 = st.columns(2)
-                with col_s1:
-                    site_id = st.text_input(f"Site ID {i+1}", value="MIN624" if i==0 else "MIN779")
-                    safety_officer_site = st.text_input(f"Safety Officer {i+1}", value="Ronnie Alvin Chiu")
-                with col_s2:
-                    anchor_id = st.text_input(f"Anchor ID/PLA No. {i+1}", value="")
-                    project_in_charge_site = st.text_input(f"Project In-Charge {i+1}", value="John Carlo Rabanes")
-                
-                worker_name = st.text_area(f"Worker Name/Designation {i+1}", 
-                                          value="RABANES, JOHN CARLO/ OLT ENGINEER" if i==0 else "Sabordo, Walrich/ Field Engineer", 
-                                          height=80)
-                
-                sites.append({
-                    'site_id': site_id,
-                    'anchor_id': anchor_id,
-                    'safety_officer': safety_officer_site,
-                    'project_in_charge': project_in_charge_site,
-                    'worker_name': worker_name
-                })
-        
-        st.subheader("⚠️ JOB HAZARD ASSESSMENT (Bottom Table)")
+        st.subheader("📌 JOB HAZARD ASSESSMENT (Bottom Table)")
         
         num_jha = st.number_input("Number of JHA entries", min_value=0, max_value=10, value=0)
         
@@ -428,10 +572,16 @@ def main():
                         'hazard': hazard,
                         'controls': controls
                     })
+    
+    with col2:
+        st.subheader("🔧 Tools and Materials")
+        tools_text = st.text_area("List tools and materials (one per line)", 
+                                  value="PPE\nFIRST AID KIT\nODF\nOPM\nOTDR\nPatchcord\nFusion Splicer\nCleaning Kit", height=150)
+        tools = [t.strip() for t in tools_text.split('\n') if t.strip()]
         
         st.subheader("🦺 Required PPE")
         ppe_options = ['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves', 'Welding Mask', 'N95 Masks', 'Goggles', 'Other PPE']
-        ppe_required = st.multiselect("Select required PPE", ppe_options)
+        ppe_required = st.multiselect("Select required PPE", ppe_options, default=['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves'])
         other_ppe_text = ""
         if 'Other PPE' in ppe_required:
             other_ppe_text = st.text_input("Other PPE details")
@@ -498,45 +648,37 @@ def main():
         'affected_utilities': locals().get('affected_utilities', ''),
         'waste_generation': waste_generation,
         'waste_list': waste_list,
-        'jha_step1': jha_step1,
-        'jha_hazard1': jha_hazard1,
-        'jha_control1': jha_control1,
-        'jha_step2': jha_step2,
-        'jha_hazard2': jha_hazard2,
-        'jha_control2': jha_control2,
-        'sites': sites,
+        'tools_materials': tools,
         'jha_steps': jha_steps,
         'ppe_required': ppe_required,
         'other_ppe_text': other_ppe_text,
         'workers': workers,
         'prepared_by': prepared_by,
         'noted_by': noted_by,
-        'approved_by': approved_by,
         'approved_status': approved_by,
         'safety_officer_approval': safety_officer_approval
     }
     
     st.markdown("---")
     
-    # Note about preservation
     st.info("""
-    ℹ️ **Template Preservation:**
-    - The original template structure is preserved
-    - 'X' marks are used for checkboxes
-    - All data is populated correctly
-    - Re-add your logo manually if needed
+    ℹ️ **This creates a clean, well-formatted Excel file from scratch with:**
+    - ☑/☐ Checkboxes (Unicode characters)
+    - All your data properly organized
+    - Professional formatting
+    - No template corruption issues
     """)
     
     # Generate Excel button
     if st.button("📥 Generate Excel File", type="primary"):
-        with st.spinner("Generating Excel file..."):
+        with st.spinner("Creating Excel file..."):
             try:
-                file_data = create_excel_template(data)
+                file_data = create_excel_file(data)
                 if file_data:
                     filename = f"HSWP_{project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
                     download_link = get_excel_download_link(file_data.getvalue(), filename)
                     
-                    st.success("✅ Excel file generated successfully!")
+                    st.success("✅ Excel file created successfully!")
                     st.markdown(download_link, unsafe_allow_html=True)
                     
                     with st.expander("📊 Preview Data Summary"):
@@ -546,13 +688,14 @@ def main():
                             'Sub Contractor': sub_contractor,
                             'Safety Officer': safety_officer,
                             'High Risk': high_risk,
-                            'Sites': len(sites),
                             'JHA Entries': len(jha_steps),
-                            'Workers': len(workers)
+                            'Workers': len(workers),
+                            'Tools': len(tools),
+                            'PPE Items': len(ppe_required)
                         }
                         st.json(summary_data)
                 else:
-                    st.error("❌ Failed to generate Excel file.")
+                    st.error("❌ Failed to create Excel file.")
                     
             except Exception as e:
                 st.error(f"❌ Error: {str(e)}")
@@ -563,19 +706,20 @@ def main():
         st.header("📝 Instructions")
         st.markdown("""
         1. Fill in all fields
-        2. Add site locations
-        3. Add JHA entries
-        4. Select PPE
-        5. List workers
-        6. Click Generate
-        7. Download the file
+        2. Add JHA entries as needed
+        3. Select PPE
+        4. List tools and workers
+        5. Click Generate
+        6. Download the file
         """)
         
-        st.header("ℹ️ Limitations")
+        st.header("✅ Features")
         st.markdown("""
-        - Images/Logos need to be re-added manually
-        - Form controls replaced with 'X' marks
-        - All data and formatting preserved
+        - Clean, professional formatting
+        - ☑/☐ checkbox style
+        - All data organized
+        - No template issues
+        - Works reliably
         """)
 
 if __name__ == "__main__":
