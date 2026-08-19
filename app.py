@@ -3,8 +3,9 @@ import pandas as pd
 from datetime import datetime
 import io
 import base64
-from openpyxl import load_workbook
-from openpyxl.utils import range_boundaries
+from openpyxl import load_workbook, Workbook
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.utils import get_column_letter
 import os
 import shutil
 import tempfile
@@ -19,30 +20,8 @@ st.set_page_config(
 st.title("🛡️ Health and Safety Work Permit Automation")
 st.markdown("---")
 
-def get_top_left_cell(ws, cell_address):
-    """Get the top-left cell of a merged range if the cell is merged"""
-    try:
-        cell = ws[cell_address]
-        for merged_range in ws.merged_cells.ranges:
-            if cell.coordinate in merged_range:
-                min_col, min_row, max_col, max_row = range_boundaries(str(merged_range))
-                return ws.cell(row=min_row, column=min_col)
-        return cell
-    except:
-        return ws[cell_address]
-
-def safe_write_cell(ws, cell_address, value):
-    """Safely write a value to a cell, handling merged cells"""
-    try:
-        target_cell = get_top_left_cell(ws, cell_address)
-        if target_cell:
-            target_cell.value = value
-        return True
-    except:
-        return False
-
 def create_excel_template(data):
-    """Create Excel file with filled data"""
+    """Create Excel file with proper formatting"""
     
     template_path = 'HSWP_template.xlsx'
     if not os.path.exists(template_path):
@@ -50,179 +29,218 @@ def create_excel_template(data):
         return None
     
     try:
-        # Create a temporary copy of the template
+        # Create a temporary copy
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
             shutil.copy2(template_path, tmp_file.name)
             temp_template_path = tmp_file.name
         
-        # Load the template
+        # Load the template WITHOUT modifying it
         wb = load_workbook(temp_template_path)
-        ws = wb.worksheets[0]
+        ws = wb.active
+        
+        # Define a function to safely write to cells
+        def write_cell(row, col, value):
+            try:
+                ws.cell(row=row, column=col, value=value)
+            except:
+                pass
         
         # ============================================
-        # PROJECT DETAILS
+        # PROJECT DETAILS - Row numbers from template
         # ============================================
-        safe_write_cell(ws, 'B2', data.get('sub_contractor', 'Ultegra Supplies and Services'))
-        safe_write_cell(ws, 'D2', data.get('requesting_vendor', 'NOKIA SHANGHAI BELL'))
-        safe_write_cell(ws, 'B4', data.get('project_in_charge', ''))
-        safe_write_cell(ws, 'D4', data.get('person_in_charge', 'John Carlo Rabanes'))
-        safe_write_cell(ws, 'B5', data.get('safety_officer', 'RONNIE ALVIN CHIU'))
-        safe_write_cell(ws, 'D5', data.get('work_schedule', ''))
-        safe_write_cell(ws, 'F5', data.get('work_time_period', ''))
-        safe_write_cell(ws, 'B6', data.get('project_name', 'FTTH HORIZONTAL'))
-        safe_write_cell(ws, 'D6', data.get('start_date', '08/10/2026'))
-        safe_write_cell(ws, 'F6', data.get('start_time', '08:00AM'))
-        safe_write_cell(ws, 'B7', data.get('work_location', 'MIN624_TS ORAPOBBUTUANAGN'))
-        safe_write_cell(ws, 'D7', data.get('end_date', '09/10/2026'))
-        safe_write_cell(ws, 'F7', data.get('end_time', '08:00PM'))
-        safe_write_cell(ws, 'B8', data.get('tower_type', 'ground base'))
-        safe_write_cell(ws, 'E8', data.get('brief_description', 'SFP link upgrade, Survey'))
+        # Row 2: Sub Contractor (B2) and Requesting Vendor (D2)
+        write_cell(2, 2, data.get('sub_contractor', 'Ultegra Supplies and Services'))
+        write_cell(2, 4, data.get('requesting_vendor', 'NOKIA SHANGHAI BELL'))
+        
+        # Row 4: Project In-Charge (B4) and Person In-charge (D4)
+        write_cell(4, 2, data.get('project_in_charge', ''))
+        write_cell(4, 4, data.get('person_in_charge', 'John Carlo Rabanes'))
+        
+        # Row 5: Safety Officer (B5), Work Schedule (D5), Work Time Period (F5)
+        write_cell(5, 2, data.get('safety_officer', 'RONNIE ALVIN CHIU'))
+        write_cell(5, 4, data.get('work_schedule', ''))
+        write_cell(5, 6, data.get('work_time_period', ''))
+        
+        # Row 6: Project Name (B6), Start Date (D6), Start Time (F6)
+        write_cell(6, 2, data.get('project_name', 'FTTH HORIZONTAL'))
+        write_cell(6, 4, data.get('start_date', '08/10/2026'))
+        write_cell(6, 6, data.get('start_time', '08:00AM'))
+        
+        # Row 7: Work Location (B7), End Date (D7), End Time (F7)
+        write_cell(7, 2, data.get('work_location', 'MIN624_TS ORAPOBBUTUANAGN'))
+        write_cell(7, 4, data.get('end_date', '09/10/2026'))
+        write_cell(7, 6, data.get('end_time', '08:00PM'))
+        
+        # Row 8: Tower Type (B8), Brief Description (E8)
+        write_cell(8, 2, data.get('tower_type', 'ground base'))
+        write_cell(8, 5, data.get('brief_description', 'SFP link upgrade, Survey'))
         
         # ============================================
         # WORK DETAILS
         # ============================================
+        # High Risk - Row 12
         high_risk = data.get('high_risk', 'NO')
-        safe_write_cell(ws, 'B12', high_risk)
+        write_cell(12, 2, high_risk)  # Column B
         
-        # Work at Heights
-        safe_write_cell(ws, 'C12', 'X' if data.get('work_at_heights', False) else '')
-        safe_write_cell(ws, 'D12', 'X' if data.get('scaffold', False) else '')
-        safe_write_cell(ws, 'E12', 'X' if data.get('ladder', False) else '')
-        safe_write_cell(ws, 'F12', 'X' if data.get('tower', False) else '')
+        # Work at Heights - Row 12
+        write_cell(12, 3, 'X' if data.get('work_at_heights', False) else '')
+        write_cell(12, 4, 'X' if data.get('scaffold', False) else '')
+        write_cell(12, 5, 'X' if data.get('ladder', False) else '')
+        write_cell(12, 6, 'X' if data.get('tower', False) else '')
         
-        # Certifications
-        safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
-        safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
-        safe_write_cell(ws, 'C14', 'X' if data.get('scaffold_components', False) else '')
-        safe_write_cell(ws, 'E14', 'X' if data.get('workers_fit', False) else '')
+        # Row 13: Certifications
+        write_cell(13, 3, data.get('scaffold_cert', ''))
+        write_cell(13, 5, data.get('wah_rigger_cert', ''))
         
-        # Electrical Works
-        safe_write_cell(ws, 'C16', 'X' if data.get('electrical_works', False) else '')
-        safe_write_cell(ws, 'C17', data.get('electrician_cert', ''))
-        safe_write_cell(ws, 'C18', 'X' if data.get('loto_device', False) else '')
-        safe_write_cell(ws, 'E18', 'X' if data.get('insulated_tools', False) else '')
+        # Row 14: Scaffold components and Workers fit
+        write_cell(14, 3, 'X' if data.get('scaffold_components', False) else '')
+        write_cell(14, 5, 'X' if data.get('workers_fit', False) else '')
         
-        # Heavy Lifting
-        safe_write_cell(ws, 'C20', data.get('operator_cert', ''))
-        safe_write_cell(ws, 'D20', data.get('rigger_cert', ''))
-        safe_write_cell(ws, 'C21', data.get('heavy_eqpt_cert', ''))
+        # Row 16: Electrical Works
+        write_cell(16, 3, 'X' if data.get('electrical_works', False) else '')
         
-        # Confined Space
-        safe_write_cell(ws, 'C23', 'X' if data.get('confined_space', False) else '')
-        safe_write_cell(ws, 'C24', data.get('scba_cert', ''))
-        safe_write_cell(ws, 'D24', data.get('ventilation_eqpt', ''))
-        safe_write_cell(ws, 'C25', 'X' if data.get('flash_arrester', False) else '')
-        safe_write_cell(ws, 'E25', 'X' if data.get('fire_blanket', False) else '')
-        safe_write_cell(ws, 'C26', data.get('o2_detector', ''))
-        safe_write_cell(ws, 'D26', data.get('safety_line', ''))
+        # Row 17: Electrician Cert
+        write_cell(17, 3, data.get('electrician_cert', ''))
         
-        # Harmful Substances
+        # Row 18: LOTO and Insulated Tools
+        write_cell(18, 3, 'X' if data.get('loto_device', False) else '')
+        write_cell(18, 5, 'X' if data.get('insulated_tools', False) else '')
+        
+        # Row 20: Heavy Lifting
+        write_cell(20, 3, data.get('operator_cert', ''))
+        write_cell(20, 4, data.get('rigger_cert', ''))
+        
+        # Row 21: Heavy Equipment Cert
+        write_cell(21, 3, data.get('heavy_eqpt_cert', ''))
+        
+        # Row 23: Confined Space
+        write_cell(23, 3, 'X' if data.get('confined_space', False) else '')
+        
+        # Row 24: SCBA and Ventilation
+        write_cell(24, 3, data.get('scba_cert', ''))
+        write_cell(24, 4, data.get('ventilation_eqpt', ''))
+        
+        # Row 25: Flash Arrester and Fire Blanket
+        write_cell(25, 3, 'X' if data.get('flash_arrester', False) else '')
+        write_cell(25, 5, 'X' if data.get('fire_blanket', False) else '')
+        
+        # Row 26: O2 Detector and Safety Line
+        write_cell(26, 3, data.get('o2_detector', ''))
+        write_cell(26, 4, data.get('safety_line', ''))
+        
+        # ============================================
+        # HARMFUL SUBSTANCES - Row 28-31
+        # ============================================
         harmful = data.get('harmful_substance', 'NO')
-        safe_write_cell(ws, 'B28', harmful)
+        write_cell(28, 2, harmful)
+        
         if harmful == 'YES':
-            safe_write_cell(ws, 'C29', 'X' if data.get('fumes', False) else '')
-            safe_write_cell(ws, 'D29', 'X' if data.get('odors', False) else '')
-            safe_write_cell(ws, 'C30', 'X' if data.get('dust', False) else '')
-            safe_write_cell(ws, 'D30', 'X' if data.get('noise', False) else '')
-            safe_write_cell(ws, 'C31', 'X' if data.get('sparks', False) else '')
-            safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
+            write_cell(29, 3, 'X' if data.get('fumes', False) else '')
+            write_cell(29, 4, 'X' if data.get('odors', False) else '')
+            write_cell(30, 3, 'X' if data.get('dust', False) else '')
+            write_cell(30, 4, 'X' if data.get('noise', False) else '')
+            write_cell(31, 3, 'X' if data.get('sparks', False) else '')
+            write_cell(31, 4, data.get('other_harmful', ''))
         
-        # Utility Interruption
+        # ============================================
+        # UTILITY INTERRUPTION - Row 33
+        # ============================================
         utility = data.get('utility_interruption', 'NO')
-        safe_write_cell(ws, 'B33', utility)
+        write_cell(33, 2, utility)
         if utility == 'YES':
-            safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
+            write_cell(34, 3, data.get('affected_utilities', ''))
         
-        # Waste Generation
+        # ============================================
+        # WASTE GENERATION - Row 37
+        # ============================================
         waste = data.get('waste_generation', 'NO')
-        safe_write_cell(ws, 'B37', waste)
+        write_cell(37, 2, waste)
         if waste == 'YES':
-            safe_write_cell(ws, 'C37', data.get('waste_list', ''))
+            write_cell(37, 3, data.get('waste_list', ''))
         
         # ============================================
-        # JHA TOP SECTION
+        # JHA TOP SECTION - Rows 3 and 5
         # ============================================
-        safe_write_cell(ws, 'G3', data.get('jha_step1', ''))
-        safe_write_cell(ws, 'H3', data.get('jha_hazard1', ''))
-        safe_write_cell(ws, 'I3', data.get('jha_control1', ''))
-        safe_write_cell(ws, 'G5', data.get('jha_step2', ''))
-        safe_write_cell(ws, 'H5', data.get('jha_hazard2', ''))
-        safe_write_cell(ws, 'I5', data.get('jha_control2', ''))
+        write_cell(3, 7, data.get('jha_step1', ''))
+        write_cell(3, 8, data.get('jha_hazard1', ''))
+        write_cell(3, 9, data.get('jha_control1', ''))
+        write_cell(5, 7, data.get('jha_step2', ''))
+        write_cell(5, 8, data.get('jha_hazard2', ''))
+        write_cell(5, 9, data.get('jha_control2', ''))
         
         # ============================================
-        # SITE LOCATIONS
+        # SITE LOCATIONS - Rows 3-12 (columns J-N)
         # ============================================
         sites = data.get('sites', [])
-        site_row_start = 3
         for i, site in enumerate(sites):
             if i >= 10:
                 break
-            row = site_row_start + i
-            safe_write_cell(ws, f'J{row}', site.get('site_id', ''))
-            safe_write_cell(ws, f'K{row}', site.get('anchor_id', ''))
-            safe_write_cell(ws, f'L{row}', site.get('safety_officer', data.get('safety_officer', 'Ronnie Alvin Chiu')))
-            safe_write_cell(ws, f'M{row}', site.get('project_in_charge', data.get('person_in_charge', 'John Carlo Rabanes')))
-            safe_write_cell(ws, f'N{row}', site.get('worker_name', ''))
+            row = 3 + i
+            write_cell(row, 10, site.get('site_id', ''))
+            write_cell(row, 11, site.get('anchor_id', ''))
+            write_cell(row, 12, site.get('safety_officer', data.get('safety_officer', 'Ronnie Alvin Chiu')))
+            write_cell(row, 13, site.get('project_in_charge', data.get('person_in_charge', 'John Carlo Rabanes')))
+            write_cell(row, 14, site.get('worker_name', ''))
         
         # ============================================
-        # JHA BOTTOM TABLE
+        # JHA BOTTOM TABLE - Starting row 48
         # ============================================
         jha_steps = data.get('jha_steps', [])
-        row_start = 48
         for i, step in enumerate(jha_steps):
             if i >= 10:
                 break
-            row = row_start + i
-            safe_write_cell(ws, f'A{row}', step.get('step', ''))
-            safe_write_cell(ws, f'B{row}', step.get('hazard', ''))
-            safe_write_cell(ws, f'D{row}', step.get('controls', ''))
+            row = 48 + i
+            write_cell(row, 1, step.get('step', ''))
+            write_cell(row, 2, step.get('hazard', ''))
+            write_cell(row, 4, step.get('controls', ''))
         
         # ============================================
-        # PPE
+        # PPE - Rows 42-43
         # ============================================
         ppe_required = data.get('ppe_required', [])
-        safe_write_cell(ws, 'B42', 'X' if 'Safety Shoes' in ppe_required else '')
-        safe_write_cell(ws, 'C42', 'X' if 'Hardhat' in ppe_required else '')
-        safe_write_cell(ws, 'D42', 'X' if 'Body Harness' in ppe_required else '')
-        safe_write_cell(ws, 'E42', 'X' if 'Gloves' in ppe_required else '')
-        safe_write_cell(ws, 'B43', 'X' if 'Welding Mask' in ppe_required else '')
-        safe_write_cell(ws, 'C43', 'X' if 'N95 Masks' in ppe_required else '')
-        safe_write_cell(ws, 'D43', 'X' if 'Goggles' in ppe_required else '')
+        write_cell(42, 2, 'X' if 'Safety Shoes' in ppe_required else '')
+        write_cell(42, 3, 'X' if 'Hardhat' in ppe_required else '')
+        write_cell(42, 4, 'X' if 'Body Harness' in ppe_required else '')
+        write_cell(42, 5, 'X' if 'Gloves' in ppe_required else '')
+        write_cell(43, 2, 'X' if 'Welding Mask' in ppe_required else '')
+        write_cell(43, 3, 'X' if 'N95 Masks' in ppe_required else '')
+        write_cell(43, 4, 'X' if 'Goggles' in ppe_required else '')
         
         if 'Other PPE' in ppe_required:
-            safe_write_cell(ws, 'E43', data.get('other_ppe_text', ''))
+            write_cell(43, 5, data.get('other_ppe_text', ''))
         
         # ============================================
-        # WORKERS (Two columns)
+        # WORKERS - Starting row 44 (two columns)
         # ============================================
         workers = data.get('workers', [])
-        worker_row_start = 44
         for i, worker in enumerate(workers):
             if i >= 16:
                 break
-            row = worker_row_start + (i // 2)
-            col = 'A' if i % 2 == 0 else 'B'
-            safe_write_cell(ws, f'{col}{row}', worker)
+            row = 44 + (i // 2)
+            col = 1 if i % 2 == 0 else 2
+            write_cell(row, col, worker)
         
         # ============================================
-        # ACKNOWLEDGEMENT
+        # ACKNOWLEDGEMENT - Rows 51-52
         # ============================================
-        safe_write_cell(ws, 'B51', data.get('prepared_by', 'RONNIE ALVIN-CHIU'))
-        safe_write_cell(ws, 'C51', data.get('noted_by', 'John Carlo Rabanes'))
-        safe_write_cell(ws, 'E52', 'X' if data.get('approved_status') == 'YES' else '')
-        safe_write_cell(ws, 'F52', 'X' if data.get('approved_status') == 'NO' else '')
-        safe_write_cell(ws, 'G52', data.get('safety_officer_approval', 'PTG MIDC O&M Regional Manager'))
+        write_cell(51, 2, data.get('prepared_by', 'RONNIE ALVIN-CHIU'))
+        write_cell(51, 3, data.get('noted_by', 'John Carlo Rabanes'))
+        write_cell(51, 5, data.get('approved_by', ''))
+        write_cell(52, 3, data.get('noted_by', 'John Carlo Rabanes'))
+        write_cell(52, 5, 'X' if data.get('approved_status') == 'YES' else '')
+        write_cell(52, 6, 'X' if data.get('approved_status') == 'NO' else '')
+        write_cell(52, 7, data.get('safety_officer_approval', 'PTG MIDC O&M Regional Manager'))
         
         # ============================================
         # Save the workbook
         # ============================================
         wb.save(temp_template_path)
         
-        # Read the saved file into memory for download
+        # Read the saved file
         with open(temp_template_path, 'rb') as f:
             file_data = f.read()
         
-        # Clean up temp file
+        # Clean up
         try:
             os.unlink(temp_template_path)
         except:
@@ -234,7 +252,7 @@ def create_excel_template(data):
         return output
         
     except Exception as e:
-        st.error(f"Error processing template: {str(e)}")
+        st.error(f"Error: {str(e)}")
         import traceback
         st.error(traceback.format_exc())
         return None
@@ -493,24 +511,20 @@ def main():
         'workers': workers,
         'prepared_by': prepared_by,
         'noted_by': noted_by,
+        'approved_by': approved_by,
         'approved_status': approved_by,
         'safety_officer_approval': safety_officer_approval
     }
     
     st.markdown("---")
     
-    # Important notice about limitations
-    st.warning("""
-    ⚠️ **Important Note for Streamlit Cloud Users:**
-    
-    Due to platform limitations (Linux-based servers), **images and form control checkboxes cannot be preserved** when modifying Excel files programmatically.
-    
-    **What to do after downloading:**
-    1. Open the file in Excel
-    2. Re-add your company logo (Insert > Pictures)
-    3. The checkboxes are replaced with 'X' marks - you can keep them as is or replace with Form Controls
-    
-    **All other formatting, merged cells, and data is preserved.**
+    # Note about preservation
+    st.info("""
+    ℹ️ **Template Preservation:**
+    - The original template structure is preserved
+    - 'X' marks are used for checkboxes
+    - All data is populated correctly
+    - Re-add your logo manually if needed
     """)
     
     # Generate Excel button
@@ -541,37 +555,27 @@ def main():
                     st.error("❌ Failed to generate Excel file.")
                     
             except Exception as e:
-                st.error(f"❌ Error generating file: {str(e)}")
+                st.error(f"❌ Error: {str(e)}")
                 st.exception(e)
     
     # Instructions
     with st.sidebar:
         st.header("📝 Instructions")
         st.markdown("""
-        1. Fill in project details
-        2. Add site locations with worker designations
-        3. Add JHA entries as needed
-        4. Select required PPE
-        5. List all workers
-        6. Click 'Generate Excel File'
-        7. Download the completed file
+        1. Fill in all fields
+        2. Add site locations
+        3. Add JHA entries
+        4. Select PPE
+        5. List workers
+        6. Click Generate
+        7. Download the file
         """)
         
-        st.header("📌 After Download")
+        st.header("ℹ️ Limitations")
         st.markdown("""
-        1. Open the file in Excel
-        2. Re-add logo: **Insert > Pictures**
-        3. Checkboxes are replaced with 'X' marks
-        4. All data is populated correctly
-        """)
-        
-        st.header("ℹ️ Technical Note")
-        st.markdown("""
-        The file is modified using **openpyxl** which cannot preserve:
-        - Embedded images
-        - Form Controls (checkboxes)
-        
-        This is a limitation of the library, not the code.
+        - Images/Logos need to be re-added manually
+        - Form controls replaced with 'X' marks
+        - All data and formatting preserved
         """)
 
 if __name__ == "__main__":
