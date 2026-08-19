@@ -8,6 +8,9 @@ from openpyxl.utils import range_boundaries
 import os
 import shutil
 import tempfile
+from openpyxl.drawing.image import Image
+import zipfile
+import xml.etree.ElementTree as ET
 
 # Set page configuration
 st.set_page_config(
@@ -48,7 +51,7 @@ def safe_write_cell(ws, cell_address, value):
         return False
 
 def create_excel_template(data):
-    """Create Excel file with filled data - working with a copy"""
+    """Create Excel file with filled data - preserving form controls"""
     # Check if template exists
     template_path = 'HSWP_template.xlsx'
     if not os.path.exists(template_path):
@@ -62,8 +65,8 @@ def create_excel_template(data):
             shutil.copy2(template_path, tmp_file.name)
             temp_template_path = tmp_file.name
         
-        # Load the temporary copy
-        wb = load_workbook(temp_template_path)
+        # Load the temporary copy with keep_vba=True to preserve controls
+        wb = load_workbook(temp_template_path, keep_vba=True)
         ws = wb.worksheets[0]  # First sheet (Work Permit)
         
         # Fill PROJECT DETAILS - using safe_write_cell for all
@@ -95,72 +98,71 @@ def create_excel_template(data):
         high_risk = data.get('high_risk', 'NO')
         safe_write_cell(ws, 'B12', high_risk)
         
-        if high_risk == 'YES':
-            # Work at Heights
-            if data.get('work_at_heights', False):
-                safe_write_cell(ws, 'C12', 'X')
-            if data.get('scaffold', False):
-                safe_write_cell(ws, 'D12', 'X')
-            if data.get('ladder', False):
-                safe_write_cell(ws, 'E12', 'X')
-            if data.get('tower', False):
-                safe_write_cell(ws, 'F12', 'X')
-            
-            # Certifications
-            safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
-            safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
-            if data.get('scaffold_components', False):
-                safe_write_cell(ws, 'C14', 'X')
-            if data.get('workers_fit', False):
-                safe_write_cell(ws, 'E14', 'X')
-            
-            # Electrical Works
-            if data.get('electrical_works', False):
-                safe_write_cell(ws, 'C16', 'X')
-            safe_write_cell(ws, 'C17', data.get('electrician_cert', ''))
-            if data.get('loto_device', False):
-                safe_write_cell(ws, 'C18', 'X')
-            if data.get('insulated_tools', False):
-                safe_write_cell(ws, 'E18', 'X')
-            
-            # Heavy Lifting
-            safe_write_cell(ws, 'C20', data.get('operator_cert', ''))
-            safe_write_cell(ws, 'D20', data.get('rigger_cert', ''))
-            safe_write_cell(ws, 'C21', data.get('heavy_eqpt_cert', ''))
-            
-            # Confined Space
-            if data.get('confined_space', False):
-                safe_write_cell(ws, 'C23', 'X')
-            safe_write_cell(ws, 'C24', data.get('scba_cert', ''))
-            safe_write_cell(ws, 'D24', data.get('ventilation_eqpt', ''))
-            if data.get('flash_arrester', False):
-                safe_write_cell(ws, 'C25', 'X')
-            if data.get('fire_blanket', False):
-                safe_write_cell(ws, 'E25', 'X')
-            safe_write_cell(ws, 'C26', data.get('o2_detector', ''))
-            safe_write_cell(ws, 'D26', data.get('safety_line', ''))
-            
-            # Harmful Substances
-            harmful = data.get('harmful_substance', 'NO')
-            safe_write_cell(ws, 'B28', harmful)
-            if harmful == 'YES':
-                if data.get('fumes', False):
-                    safe_write_cell(ws, 'C29', 'X')
-                if data.get('odors', False):
-                    safe_write_cell(ws, 'D29', 'X')
-                if data.get('dust', False):
-                    safe_write_cell(ws, 'C30', 'X')
-                if data.get('noise', False):
-                    safe_write_cell(ws, 'D30', 'X')
-                if data.get('sparks', False):
-                    safe_write_cell(ws, 'C31', 'X')
-                safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
-            
-            # Utility Interruption
-            utility = data.get('utility_interruption', 'NO')
-            safe_write_cell(ws, 'B33', utility)
-            if utility == 'YES':
-                safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
+        # Work at Heights - use 'X' to mark checkboxes
+        if data.get('work_at_heights', False):
+            safe_write_cell(ws, 'C12', 'X')
+        if data.get('scaffold', False):
+            safe_write_cell(ws, 'D12', 'X')
+        if data.get('ladder', False):
+            safe_write_cell(ws, 'E12', 'X')
+        if data.get('tower', False):
+            safe_write_cell(ws, 'F12', 'X')
+        
+        # Certifications
+        safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
+        safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
+        if data.get('scaffold_components', False):
+            safe_write_cell(ws, 'C14', 'X')
+        if data.get('workers_fit', False):
+            safe_write_cell(ws, 'E14', 'X')
+        
+        # Electrical Works
+        if data.get('electrical_works', False):
+            safe_write_cell(ws, 'C16', 'X')
+        safe_write_cell(ws, 'C17', data.get('electrician_cert', ''))
+        if data.get('loto_device', False):
+            safe_write_cell(ws, 'C18', 'X')
+        if data.get('insulated_tools', False):
+            safe_write_cell(ws, 'E18', 'X')
+        
+        # Heavy Lifting
+        safe_write_cell(ws, 'C20', data.get('operator_cert', ''))
+        safe_write_cell(ws, 'D20', data.get('rigger_cert', ''))
+        safe_write_cell(ws, 'C21', data.get('heavy_eqpt_cert', ''))
+        
+        # Confined Space
+        if data.get('confined_space', False):
+            safe_write_cell(ws, 'C23', 'X')
+        safe_write_cell(ws, 'C24', data.get('scba_cert', ''))
+        safe_write_cell(ws, 'D24', data.get('ventilation_eqpt', ''))
+        if data.get('flash_arrester', False):
+            safe_write_cell(ws, 'C25', 'X')
+        if data.get('fire_blanket', False):
+            safe_write_cell(ws, 'E25', 'X')
+        safe_write_cell(ws, 'C26', data.get('o2_detector', ''))
+        safe_write_cell(ws, 'D26', data.get('safety_line', ''))
+        
+        # Harmful Substances
+        harmful = data.get('harmful_substance', 'NO')
+        safe_write_cell(ws, 'B28', harmful)
+        if harmful == 'YES':
+            if data.get('fumes', False):
+                safe_write_cell(ws, 'C29', 'X')
+            if data.get('odors', False):
+                safe_write_cell(ws, 'D29', 'X')
+            if data.get('dust', False):
+                safe_write_cell(ws, 'C30', 'X')
+            if data.get('noise', False):
+                safe_write_cell(ws, 'D30', 'X')
+            if data.get('sparks', False):
+                safe_write_cell(ws, 'C31', 'X')
+            safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
+        
+        # Utility Interruption
+        utility = data.get('utility_interruption', 'NO')
+        safe_write_cell(ws, 'B33', utility)
+        if utility == 'YES':
+            safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
         
         # Fill JHA Table (bottom section)
         jha_steps = data.get('jha_steps', [])
@@ -172,7 +174,7 @@ def create_excel_template(data):
             safe_write_cell(ws, f'B{row_start + i}', step.get('hazard', ''))
             safe_write_cell(ws, f'D{row_start + i}', step.get('controls', ''))
         
-        # Fill PPE
+        # Fill PPE - use 'X' to mark checkboxes
         ppe_required = data.get('ppe_required', [])
         ppe_mapping = {
             'Safety Shoes': 'B42',
@@ -223,7 +225,7 @@ def create_excel_template(data):
         else:
             safe_write_cell(ws, 'B37', 'NO')
         
-        # Save the workbook
+        # Save the workbook with keep_vba=True to preserve form controls
         wb.save(temp_template_path)
         
         # Read the saved file into memory for download
@@ -579,16 +581,18 @@ def main():
         - All fields marked with * are required
         - The generated file will be named with the project name and timestamp
         - The original template will NOT be modified
+        - **IMPORTANT:** Form controls (checkboxes) are preserved
         """)
         
         st.header("ℹ️ About")
         st.markdown("""
         This tool automates the creation of Health and Safety Work Permits.
         
-        **Version:** 1.0.2
+        **Version:** 1.0.3
         **Last Updated:** 2026-08-19
         
         **Features:**
+        - Preserves form controls (checkboxes)
         - Works with a copy of the template (original preserved)
         - Handles merged cells properly
         - Complete form coverage
