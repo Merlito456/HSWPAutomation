@@ -5,7 +5,7 @@ import io
 import base64
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
-from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.styles import Font
 import os
 import shutil
 import tempfile
@@ -48,8 +48,23 @@ def safe_write_cell(ws, cell_address, value):
         print(f"Error writing to {cell_address}: {str(e)}")
         return False
 
+def set_checkbox(ws, cell_address, checked=False):
+    """Set a checkbox using Wingdings font"""
+    try:
+        target_cell = get_top_left_cell(ws, cell_address)
+        if checked:
+            target_cell.value = "☑"  # Wingdings checkmark
+            target_cell.font = Font(name='Segoe UI Symbol', size=11)
+        else:
+            target_cell.value = "☐"  # Wingdings empty box
+            target_cell.font = Font(name='Segoe UI Symbol', size=11)
+        return True
+    except Exception as e:
+        print(f"Error setting checkbox at {cell_address}: {str(e)}")
+        return False
+
 def create_excel_template(data):
-    """Create Excel file with filled data - using cells for checkmarks"""
+    """Create Excel file with filled data"""
     # Check if template exists
     template_path = 'HSWP_template.xlsx'
     if not os.path.exists(template_path):
@@ -59,13 +74,12 @@ def create_excel_template(data):
     try:
         # Create a temporary copy of the template
         with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-            # Copy the template to temp file
             shutil.copy2(template_path, tmp_file.name)
             temp_template_path = tmp_file.name
         
-        # Load the template WITHOUT keep_vba to avoid corruption
-        wb = load_workbook(temp_template_path, data_only=True)
-        ws = wb.worksheets[0]  # First sheet (Work Permit)
+        # Load the template
+        wb = load_workbook(temp_template_path)
+        ws = wb.worksheets[0]
         
         # Fill PROJECT DETAILS
         safe_write_cell(ws, 'B2', data.get('sub_contractor', ''))
@@ -92,83 +106,110 @@ def create_excel_template(data):
         safe_write_cell(ws, 'H5', data.get('jha_hazard2', ''))
         safe_write_cell(ws, 'I5', data.get('jha_control2', ''))
         
-        # Fill WORK DETAILS based on high risk
+        # High Risk Selection - using checkboxes
         high_risk = data.get('high_risk', 'NO')
-        safe_write_cell(ws, 'B12', high_risk)
+        if high_risk == 'YES':
+            set_checkbox(ws, 'B12', True)  # YES checkbox
+            set_checkbox(ws, 'B13', False)  # NO checkbox
+        else:
+            set_checkbox(ws, 'B12', False)  # YES checkbox
+            set_checkbox(ws, 'B13', True)   # NO checkbox
         
-        # Work at Heights - use 'X' to mark selections
+        # Work at Heights checkboxes
         if data.get('work_at_heights', False):
-            safe_write_cell(ws, 'C12', 'X')
+            set_checkbox(ws, 'C12', True)
         if data.get('scaffold', False):
-            safe_write_cell(ws, 'D12', 'X')
+            set_checkbox(ws, 'D12', True)
         if data.get('ladder', False):
-            safe_write_cell(ws, 'E12', 'X')
+            set_checkbox(ws, 'E12', True)
         if data.get('tower', False):
-            safe_write_cell(ws, 'F12', 'X')
+            set_checkbox(ws, 'F12', True)
         
-        # Certifications
+        # Certifications - text fields
         safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
         safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
+        
+        # Scaffold components and Workers fit
         if data.get('scaffold_components', False):
-            safe_write_cell(ws, 'C14', 'X')
+            set_checkbox(ws, 'C14', True)
         if data.get('workers_fit', False):
-            safe_write_cell(ws, 'E14', 'X')
+            set_checkbox(ws, 'E14', True)
         
         # Electrical Works
         if data.get('electrical_works', False):
-            safe_write_cell(ws, 'C16', 'X')
+            set_checkbox(ws, 'C16', True)
         safe_write_cell(ws, 'C17', data.get('electrician_cert', ''))
         if data.get('loto_device', False):
-            safe_write_cell(ws, 'C18', 'X')
+            set_checkbox(ws, 'C18', True)
         if data.get('insulated_tools', False):
-            safe_write_cell(ws, 'E18', 'X')
+            set_checkbox(ws, 'E18', True)
         
-        # Heavy Lifting
+        # Heavy Lifting - text fields
         safe_write_cell(ws, 'C20', data.get('operator_cert', ''))
         safe_write_cell(ws, 'D20', data.get('rigger_cert', ''))
         safe_write_cell(ws, 'C21', data.get('heavy_eqpt_cert', ''))
         
         # Confined Space
         if data.get('confined_space', False):
-            safe_write_cell(ws, 'C23', 'X')
+            set_checkbox(ws, 'C23', True)
         safe_write_cell(ws, 'C24', data.get('scba_cert', ''))
         safe_write_cell(ws, 'D24', data.get('ventilation_eqpt', ''))
         if data.get('flash_arrester', False):
-            safe_write_cell(ws, 'C25', 'X')
+            set_checkbox(ws, 'C25', True)
         if data.get('fire_blanket', False):
-            safe_write_cell(ws, 'E25', 'X')
+            set_checkbox(ws, 'E25', True)
         safe_write_cell(ws, 'C26', data.get('o2_detector', ''))
         safe_write_cell(ws, 'D26', data.get('safety_line', ''))
         
-        # Harmful Substances
+        # Harmful Substances - Radio buttons
         harmful = data.get('harmful_substance', 'NO')
-        safe_write_cell(ws, 'B28', harmful)
         if harmful == 'YES':
-            if data.get('fumes', False):
-                safe_write_cell(ws, 'C29', 'X')
-            if data.get('odors', False):
-                safe_write_cell(ws, 'D29', 'X')
-            if data.get('dust', False):
-                safe_write_cell(ws, 'C30', 'X')
-            if data.get('noise', False):
-                safe_write_cell(ws, 'D30', 'X')
-            if data.get('sparks', False):
-                safe_write_cell(ws, 'C31', 'X')
-            safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
+            set_checkbox(ws, 'B28', True)
+            set_checkbox(ws, 'B29', False)
+        else:
+            set_checkbox(ws, 'B28', False)
+            set_checkbox(ws, 'B29', True)
         
-        # Utility Interruption
+        # Harmful substance checkboxes
+        if data.get('fumes', False):
+            set_checkbox(ws, 'C29', True)
+        if data.get('odors', False):
+            set_checkbox(ws, 'D29', True)
+        if data.get('dust', False):
+            set_checkbox(ws, 'C30', True)
+        if data.get('noise', False):
+            set_checkbox(ws, 'D30', True)
+        if data.get('sparks', False):
+            set_checkbox(ws, 'C31', True)
+        safe_write_cell(ws, 'D31', data.get('other_harmful', ''))
+        
+        # Utility Interruption - Radio buttons
         utility = data.get('utility_interruption', 'NO')
-        safe_write_cell(ws, 'B33', utility)
+        if utility == 'YES':
+            set_checkbox(ws, 'B33', True)
+            set_checkbox(ws, 'B34', False)
+            set_checkbox(ws, 'B35', False)
+        elif utility == 'NO':
+            set_checkbox(ws, 'B33', False)
+            set_checkbox(ws, 'B34', True)
+            set_checkbox(ws, 'B35', False)
+        else:  # N/A
+            set_checkbox(ws, 'B33', False)
+            set_checkbox(ws, 'B34', False)
+            set_checkbox(ws, 'B35', True)
+        
         if utility == 'YES':
             safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
         
-        # Waste Generation
-        if data.get('waste_generation') == 'YES':
-            safe_write_cell(ws, 'B37', 'YES')
-            waste_list = data.get('waste_list', '')
-            safe_write_cell(ws, 'C37', waste_list)
+        # Waste Generation - Radio buttons
+        waste = data.get('waste_generation', 'NO')
+        if waste == 'YES':
+            set_checkbox(ws, 'B37', True)
+            set_checkbox(ws, 'B38', False)
+            safe_write_cell(ws, 'C37', data.get('waste_list', ''))
         else:
-            safe_write_cell(ws, 'B37', 'NO')
+            set_checkbox(ws, 'B37', False)
+            set_checkbox(ws, 'B38', True)
         
         # Fill JHA Table (bottom section)
         jha_steps = data.get('jha_steps', [])
@@ -180,7 +221,7 @@ def create_excel_template(data):
             safe_write_cell(ws, f'B{row_start + i}', step.get('hazard', ''))
             safe_write_cell(ws, f'D{row_start + i}', step.get('controls', ''))
         
-        # Fill PPE - use 'X' to mark selections
+        # Fill PPE - using checkboxes
         ppe_required = data.get('ppe_required', [])
         ppe_mapping = {
             'Safety Shoes': 'B42',
@@ -193,7 +234,9 @@ def create_excel_template(data):
         }
         for ppe, cell in ppe_mapping.items():
             if ppe in ppe_required:
-                safe_write_cell(ws, cell, 'X')
+                set_checkbox(ws, cell, True)
+            else:
+                set_checkbox(ws, cell, False)
         
         if 'Other PPE' in ppe_required:
             safe_write_cell(ws, 'E43', data.get('other_ppe_text', ''))
@@ -220,10 +263,12 @@ def create_excel_template(data):
         safe_write_cell(ws, 'E51', data.get('approved_by', ''))
         safe_write_cell(ws, 'C52', data.get('noted_by', ''))
         if data.get('approved_status') == 'YES':
-            safe_write_cell(ws, 'E52', 'X')
+            set_checkbox(ws, 'E52', True)
+        else:
+            set_checkbox(ws, 'E52', False)
         safe_write_cell(ws, 'G52', data.get('safety_officer_approval', ''))
         
-        # Save the workbook WITHOUT keep_vba to avoid corruption
+        # Save the workbook
         wb.save(temp_template_path)
         
         # Read the saved file into memory for download
@@ -236,7 +281,6 @@ def create_excel_template(data):
         except:
             pass
         
-        # Create a BytesIO object with the data
         output = io.BytesIO(file_data)
         output.seek(0)
         
@@ -261,7 +305,6 @@ def main():
     with col1:
         st.subheader("📋 Project Details")
         
-        # Project Details
         sub_contractor = st.text_input("Name of Sub Contractor", value="Ultegra Supplies and Services")
         requesting_vendor = st.text_input("Requesting Vendor", value="NOKIA SHANGHAI BELL")
         project_in_charge = st.text_input("Project In-Charge")
@@ -343,7 +386,6 @@ def main():
                 if utility_interruption == "YES":
                     affected_utilities = st.text_area("Specify affected utilities and affected areas")
         else:
-            # Set defaults for non-high risk
             work_at_heights = scaffold = ladder = tower = False
             scaffold_cert = wah_rigger_cert = ""
             scaffold_components = workers_fit = False
@@ -373,29 +415,23 @@ def main():
         # Main JHA Table
         st.markdown("**JOB HAZARD ASSESSMENT**")
         
-        # Step 1
         jha_step1 = st.text_input("Job Step 1", value="Site Access")
         jha_hazard1 = st.text_input("Hazard 1", value="Slip, trip, and fall from uneven surface")
         jha_control1 = st.text_area("Control 1", value="Coordinate with lessor/UDI security prior to entry. Ensure all permits are on hand. Only authorized person can enter the area", height=60)
         
-        # Step 2
         jha_step2 = st.text_input("Job Step 2", value="Prepare Work Area")
         jha_hazard2 = st.text_input("Hazard 2", value="Trips/Falls: Uneven surfaces, debris, inadequate lighting")
         jha_control2 = st.text_area("Control 2", value="Clear work area of debris, ensure adequate lighting, wear appropriate footwear (safety shoes)", height=60)
         
-        # Step 3
         jha_step3 = st.text_input("Job Step 3", value="Handling of Fiber Optic cables")
         jha_hazard3 = st.text_input("Hazard 3", value="Cuts/Lacerations: Sharp edges of fibers or connectors")
         jha_control3 = st.text_area("Control 3", value="Wear cut-resistant gloves. Handle fibers with care", height=60)
         
-        # Additional JHA entries
         st.markdown("---")
         st.subheader("Additional JHA Entries")
         
-        # Create JHA steps list with defaults
         jha_steps = []
         
-        # Add the first three steps
         if jha_step1 and jha_hazard1 and jha_control1:
             jha_steps.append({
                 'step': jha_step1,
@@ -417,7 +453,6 @@ def main():
                 'controls': jha_control3
             })
         
-        # Additional JHA rows
         num_extra = st.number_input("Number of additional JHA entries", min_value=0, max_value=7, value=0)
         
         for i in range(num_extra):
@@ -529,17 +564,14 @@ def main():
     if st.button("📥 Generate Excel File", type="primary"):
         with st.spinner("Generating Excel file..."):
             try:
-                # Create Excel file
                 file_data = create_excel_template(data)
                 if file_data:
-                    # Generate download link
                     filename = f"HSWP_{project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
                     download_link = get_excel_download_link(file_data.getvalue(), filename)
                     
                     st.success("✅ Excel file generated successfully!")
                     st.markdown(download_link, unsafe_allow_html=True)
                     
-                    # Preview data
                     with st.expander("📊 Preview Data Summary"):
                         summary_data = {
                             'Project': project_name,
@@ -572,27 +604,23 @@ def main():
         6. Download the completed Excel file
         """)
         
-        st.header("📋 Template Requirements")
+        st.header("📋 Important Notes")
         st.markdown("""
-        - The template file 'HSWP_template.xlsx' must be in the repository
-        - All fields marked with * are required
-        - The generated file will be named with the project name and timestamp
-        - **Note:** 'X' is used to mark selections instead of checkboxes
+        - The template uses Unicode checkbox characters (☐/☑)
+        - These work across all Excel versions
+        - Original template is preserved
         """)
         
         st.header("ℹ️ About")
         st.markdown("""
-        This tool automates the creation of Health and Safety Work Permits.
-        
-        **Version:** 1.0.4
+        **Version:** 1.0.5
         **Last Updated:** 2026-08-19
         
         **Features:**
-        - Uses 'X' marks in cells instead of form controls (more reliable)
-        - Works with a copy of the template (original preserved)
-        - Handles merged cells properly
-        - Complete form coverage
-        - Excel export with formatting
+        - Unicode checkbox characters (☐/☑)
+        - No form controls to lose
+        - Works in all Excel versions
+        - Reliable and consistent
         """)
 
 if __name__ == "__main__":
