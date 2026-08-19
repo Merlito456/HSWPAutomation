@@ -3,10 +3,13 @@ import pandas as pd
 from datetime import datetime
 import io
 import base64
+from openpyxl import load_workbook
+from openpyxl.utils import range_boundaries
 import os
+import shutil
 import tempfile
-import zipfile
-import xml.etree.ElementTree as ET
+import subprocess
+import sys
 
 # Set page configuration
 st.set_page_config(
@@ -18,297 +21,207 @@ st.set_page_config(
 st.title("🛡️ Health and Safety Work Permit Automation")
 st.markdown("---")
 
-def create_checkbox_overlay_xml(cell_ref, checked=False, checkbox_id=1):
-    """Create XML for a checkbox overlay"""
-    # This creates the XML structure for a Form Control checkbox
-    x, y = cell_ref  # These would need to be calculated from cell positions
-    
-    checkbox_xml = f'''
-    <x14:checkbox xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main">
-        <x14:pr x14:checked="{str(checked).lower()}" x14:val="Check Box {checkbox_id}"/>
-        <x14:anchor>
-            <xdr:from xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
-                <xdr:col>{x}</xdr:col>
-                <xdr:colOff>0</xdr:colOff>
-                <xdr:row>{y}</xdr:row>
-                <xdr:rowOff>0</xdr:rowOff>
-            </xdr:from>
-            <xdr:to xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing">
-                <xdr:col>{x+1}</xdr:col>
-                <xdr:colOff>0</xdr:colOff>
-                <xdr:row>{y+1}</xdr:row>
-                <xdr:rowOff>0</xdr:rowOff>
-            </xdr:to>
-        </x14:anchor>
-    </x14:checkbox>
-    '''
-    return checkbox_xml
-
-def create_excel_with_overlay_checkboxes(data):
-    """Create Excel file with overlay checkboxes using xlsxwriter"""
+def get_top_left_cell(ws, cell_address):
+    """Get the top-left cell of a merged range if the cell is merged"""
     try:
-        # Use xlsxwriter for better checkbox support
-        import xlsxwriter
+        cell = ws[cell_address]
+        for merged_range in ws.merged_cells.ranges:
+            if cell.coordinate in merged_range:
+                min_col, min_row, max_col, max_row = range_boundaries(str(merged_range))
+                return ws.cell(row=min_row, column=min_col)
+        return cell
+    except:
+        return ws[cell_address]
+
+def safe_write_cell(ws, cell_address, value):
+    """Safely write a value to a cell, handling merged cells"""
+    try:
+        target_cell = get_top_left_cell(ws, cell_address)
+        if target_cell:
+            target_cell.value = value
+        return True
+    except:
+        return False
+
+def create_excel_template(data):
+    """Create Excel file with data and VBA macro to add checkboxes"""
+    
+    # Check if template exists
+    template_path = 'HSWP_template.xlsx'
+    if not os.path.exists(template_path):
+        st.error("⚠️ Template file 'HSWP_template.xlsx' not found!")
+        return None
+    
+    try:
+        # Create a temporary copy of the template
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+            shutil.copy2(template_path, tmp_file.name)
+            temp_template_path = tmp_file.name
         
-        # Create a BytesIO object
-        output = io.BytesIO()
+        # Load the template
+        wb = load_workbook(temp_template_path)
+        ws = wb.worksheets[0]
         
-        # Create workbook with VBA support
-        workbook = xlsxwriter.Workbook(output, {'vba': True})
+        # Fill PROJECT DETAILS
+        safe_write_cell(ws, 'B2', data.get('sub_contractor', ''))
+        safe_write_cell(ws, 'D2', data.get('requesting_vendor', ''))
+        safe_write_cell(ws, 'B4', data.get('project_in_charge', ''))
+        safe_write_cell(ws, 'B5', data.get('safety_officer', ''))
+        safe_write_cell(ws, 'B6', data.get('project_name', ''))
+        safe_write_cell(ws, 'B7', data.get('work_location', ''))
+        safe_write_cell(ws, 'B8', data.get('tower_type', ''))
+        safe_write_cell(ws, 'D4', data.get('person_in_charge', ''))
+        safe_write_cell(ws, 'D5', data.get('work_schedule', ''))
+        safe_write_cell(ws, 'D6', data.get('start_date', ''))
+        safe_write_cell(ws, 'D7', data.get('end_date', ''))
+        safe_write_cell(ws, 'F5', data.get('work_time_period', ''))
+        safe_write_cell(ws, 'F6', data.get('start_time', ''))
+        safe_write_cell(ws, 'F7', data.get('end_time', ''))
+        safe_write_cell(ws, 'E8', data.get('brief_description', ''))
         
-        # Add a worksheet
-        worksheet = workbook.add_worksheet('Work Permit')
+        # Fill JHA Assessment
+        safe_write_cell(ws, 'G3', data.get('jha_step1', ''))
+        safe_write_cell(ws, 'H3', data.get('jha_hazard1', ''))
+        safe_write_cell(ws, 'I3', data.get('jha_control1', ''))
+        safe_write_cell(ws, 'G5', data.get('jha_step2', ''))
+        safe_write_cell(ws, 'H5', data.get('jha_hazard2', ''))
+        safe_write_cell(ws, 'I5', data.get('jha_control2', ''))
         
-        # Set column widths
-        worksheet.set_column('A:A', 30)
-        worksheet.set_column('B:B', 20)
-        worksheet.set_column('C:C', 20)
-        worksheet.set_column('D:D', 20)
-        worksheet.set_column('E:E', 20)
-        worksheet.set_column('F:F', 20)
-        worksheet.set_column('G:G', 20)
-        
-        # Define formats
-        header_format = workbook.add_format({
-            'bold': True,
-            'font_size': 14,
-            'align': 'center',
-            'valign': 'vcenter'
-        })
-        
-        label_format = workbook.add_format({
-            'bold': True,
-            'font_size': 11
-        })
-        
-        text_format = workbook.add_format({
-            'font_size': 11
-        })
-        
-        # Write header
-        worksheet.merge_range('A1:F1', 'HEALTH and SAFETY WORK PERMIT', header_format)
-        worksheet.merge_range('A2:F2', 'NOKIA SHANGHAI BELL', header_format)
-        
-        # PROJECT DETAILS
-        worksheet.write('A4', 'Name of Sub Contractor', label_format)
-        worksheet.write('B4', data.get('sub_contractor', ''), text_format)
-        worksheet.write('D4', 'Requesting Vendor', label_format)
-        worksheet.write('E4', data.get('requesting_vendor', ''), text_format)
-        
-        worksheet.write('A5', 'Project In-Charge', label_format)
-        worksheet.write('B5', data.get('project_in_charge', ''), text_format)
-        worksheet.write('D5', 'Person In-charge', label_format)
-        worksheet.write('E5', data.get('person_in_charge', ''), text_format)
-        
-        worksheet.write('A6', 'Project Safety Officer', label_format)
-        worksheet.write('B6', data.get('safety_officer', ''), text_format)
-        worksheet.write('D6', 'Work Schedule', label_format)
-        worksheet.write('E6', data.get('work_schedule', ''), text_format)
-        
-        worksheet.write('A7', 'Project Name', label_format)
-        worksheet.write('B7', data.get('project_name', ''), text_format)
-        worksheet.write('D7', 'Start Date', label_format)
-        worksheet.write('E7', data.get('start_date', ''), text_format)
-        worksheet.write('G7', 'Start Time', label_format)
-        worksheet.write('H7', data.get('start_time', ''), text_format)
-        
-        worksheet.write('A8', 'Work Location', label_format)
-        worksheet.write('B8', data.get('work_location', ''), text_format)
-        worksheet.write('D8', 'End Date', label_format)
-        worksheet.write('E8', data.get('end_date', ''), text_format)
-        worksheet.write('G8', 'End Time', label_format)
-        worksheet.write('H8', data.get('end_time', ''), text_format)
-        
-        worksheet.write('A9', 'Tower Type', label_format)
-        worksheet.write('B9', data.get('tower_type', ''), text_format)
-        worksheet.write('D9', 'Brief Description of Work', label_format)
-        worksheet.merge_range('E9:G9', data.get('brief_description', ''), text_format)
-        
-        # WORK DETAILS
-        worksheet.write('A11', 'WORK DETAILS', header_format)
-        
+        # Fill checkbox-linked cells with X or empty
         # High Risk
-        worksheet.write('A12', 'Is work to be done with high risk?', label_format)
-        
-        # Add checkboxes for High Risk
         high_risk = data.get('high_risk', 'NO')
-        # YES checkbox
-        worksheet.write('C12', 'YES')
-        worksheet.insert_checkbox('B12', {'checked': high_risk == 'YES'})
-        # NO checkbox
-        worksheet.write('D12', 'NO')
-        worksheet.insert_checkbox('E12', {'checked': high_risk == 'NO'})
+        safe_write_cell(ws, 'B12', 'X' if high_risk == 'YES' else '')
+        safe_write_cell(ws, 'D12', 'X' if high_risk == 'NO' else '')
         
-        if high_risk == 'YES':
-            # Work at Heights
-            worksheet.write('A13', 'Work at Heights', label_format)
-            worksheet.insert_checkbox('C13', {'checked': data.get('work_at_heights', False)})
-            
-            worksheet.write('A14', 'Scaffold', label_format)
-            worksheet.insert_checkbox('C14', {'checked': data.get('scaffold', False)})
-            
-            worksheet.write('A15', 'Ladder', label_format)
-            worksheet.insert_checkbox('C15', {'checked': data.get('ladder', False)})
-            
-            worksheet.write('A16', 'Tower', label_format)
-            worksheet.insert_checkbox('C16', {'checked': data.get('tower', False)})
-            
-            # Certifications
-            worksheet.write('A17', 'NCII Cert of Scaffold Erector', label_format)
-            worksheet.write('C17', data.get('scaffold_cert', ''), text_format)
-            worksheet.write('D17', 'WAH Rigger Certificate', label_format)
-            worksheet.write('E17', data.get('wah_rigger_cert', ''), text_format)
-            
-            worksheet.write('A18', 'Scaffold components available', label_format)
-            worksheet.insert_checkbox('C18', {'checked': data.get('scaffold_components', False)})
-            worksheet.write('D18', 'Workers physically fit', label_format)
-            worksheet.insert_checkbox('E18', {'checked': data.get('workers_fit', False)})
-            
-            # Electrical Works
-            worksheet.write('A19', 'Electrical Works', label_format)
-            worksheet.insert_checkbox('C19', {'checked': data.get('electrical_works', False)})
-            
-            worksheet.write('A20', 'NCII Cert of Electrician or ID of REE/RME', label_format)
-            worksheet.write('C20', data.get('electrician_cert', ''), text_format)
-            
-            worksheet.write('A21', 'LOTO Device', label_format)
-            worksheet.insert_checkbox('C21', {'checked': data.get('loto_device', False)})
-            worksheet.write('D21', 'Insulated Tools', label_format)
-            worksheet.insert_checkbox('E21', {'checked': data.get('insulated_tools', False)})
-            
-            # Heavy Lifting
-            worksheet.write('A22', 'Heavy Lifting w/ Equipment', label_format)
-            worksheet.write('A23', 'NCII Cert of Operator', label_format)
-            worksheet.write('C23', data.get('operator_cert', ''), text_format)
-            worksheet.write('D23', 'Cert of Lift Rigger', label_format)
-            worksheet.write('E23', data.get('rigger_cert', ''), text_format)
-            worksheet.write('A24', '3rd Party Certification of Heavy Eqpt', label_format)
-            worksheet.write('C24', data.get('heavy_eqpt_cert', ''), text_format)
-            
-            # Confined Space
-            worksheet.write('A25', 'Confined Space Works', label_format)
-            worksheet.insert_checkbox('C25', {'checked': data.get('confined_space', False)})
-            
-            worksheet.write('A26', 'Certificate of SCBA Operator', label_format)
-            worksheet.write('C26', data.get('scba_cert', ''), text_format)
-            worksheet.write('D26', 'Ventilation Equipment', label_format)
-            worksheet.write('E26', data.get('ventilation_eqpt', ''), text_format)
-            
-            worksheet.write('A27', 'OxyFuel flash back arrester installed', label_format)
-            worksheet.insert_checkbox('C27', {'checked': data.get('flash_arrester', False)})
-            worksheet.write('D27', 'Fire Blanket', label_format)
-            worksheet.insert_checkbox('E27', {'checked': data.get('fire_blanket', False)})
-            
-            worksheet.write('A28', 'O2 and Gas Detector', label_format)
-            worksheet.write('C28', data.get('o2_detector', ''), text_format)
-            worksheet.write('D28', 'Safety Line', label_format)
-            worksheet.write('E28', data.get('safety_line', ''), text_format)
-            
-            # Harmful Substances
-            worksheet.write('A29', 'Is there any harmful substance or nuisance release?', label_format)
-            harmful = data.get('harmful_substance', 'NO')
-            worksheet.write('C29', 'YES')
-            worksheet.insert_checkbox('B29', {'checked': harmful == 'YES'})
-            worksheet.write('D29', 'NO')
-            worksheet.insert_checkbox('E29', {'checked': harmful == 'NO'})
-            
-            if harmful == 'YES':
-                worksheet.write('A30', 'Fumes', label_format)
-                worksheet.insert_checkbox('C30', {'checked': data.get('fumes', False)})
-                worksheet.write('D30', 'Offensive Odors', label_format)
-                worksheet.insert_checkbox('E30', {'checked': data.get('odors', False)})
-                
-                worksheet.write('A31', 'Dust', label_format)
-                worksheet.insert_checkbox('C31', {'checked': data.get('dust', False)})
-                worksheet.write('D31', 'Noise', label_format)
-                worksheet.insert_checkbox('E31', {'checked': data.get('noise', False)})
-                
-                worksheet.write('A32', 'Sparks', label_format)
-                worksheet.insert_checkbox('C32', {'checked': data.get('sparks', False)})
-                worksheet.write('D32', 'Others:', label_format)
-                worksheet.write('E32', data.get('other_harmful', ''), text_format)
-            
-            # Utility Interruption
-            worksheet.write('A33', 'Will there be Utility interruption?', label_format)
-            utility = data.get('utility_interruption', 'NO')
-            worksheet.write('C33', 'YES')
-            worksheet.insert_checkbox('B33', {'checked': utility == 'YES'})
-            worksheet.write('D33', 'NO')
-            worksheet.insert_checkbox('E33', {'checked': utility == 'NO'})
-            worksheet.write('F33', 'N/A')
-            worksheet.insert_checkbox('G33', {'checked': utility == 'N/A'})
-            
-            if utility == 'YES':
-                worksheet.write('A34', 'Specify affected utilities and affected areas', label_format)
-                worksheet.merge_range('C34:G34', data.get('affected_utilities', ''), text_format)
+        # Work at Heights
+        safe_write_cell(ws, 'C13', 'X' if data.get('work_at_heights', False) else '')
+        safe_write_cell(ws, 'C14', 'X' if data.get('scaffold', False) else '')
+        safe_write_cell(ws, 'C15', 'X' if data.get('ladder', False) else '')
+        safe_write_cell(ws, 'C16', 'X' if data.get('tower', False) else '')
+        
+        # Certifications
+        safe_write_cell(ws, 'C13', data.get('scaffold_cert', ''))
+        safe_write_cell(ws, 'E13', data.get('wah_rigger_cert', ''))
+        safe_write_cell(ws, 'C18', 'X' if data.get('scaffold_components', False) else '')
+        safe_write_cell(ws, 'E18', 'X' if data.get('workers_fit', False) else '')
+        
+        # Electrical Works
+        safe_write_cell(ws, 'C19', 'X' if data.get('electrical_works', False) else '')
+        safe_write_cell(ws, 'C20', data.get('electrician_cert', ''))
+        safe_write_cell(ws, 'C21', 'X' if data.get('loto_device', False) else '')
+        safe_write_cell(ws, 'E21', 'X' if data.get('insulated_tools', False) else '')
+        
+        # Heavy Lifting
+        safe_write_cell(ws, 'C23', data.get('operator_cert', ''))
+        safe_write_cell(ws, 'E23', data.get('rigger_cert', ''))
+        safe_write_cell(ws, 'C24', data.get('heavy_eqpt_cert', ''))
+        
+        # Confined Space
+        safe_write_cell(ws, 'C25', 'X' if data.get('confined_space', False) else '')
+        safe_write_cell(ws, 'C26', data.get('scba_cert', ''))
+        safe_write_cell(ws, 'E26', data.get('ventilation_eqpt', ''))
+        safe_write_cell(ws, 'C27', 'X' if data.get('flash_arrester', False) else '')
+        safe_write_cell(ws, 'E27', 'X' if data.get('fire_blanket', False) else '')
+        safe_write_cell(ws, 'C28', data.get('o2_detector', ''))
+        safe_write_cell(ws, 'E28', data.get('safety_line', ''))
+        
+        # Harmful Substances
+        harmful = data.get('harmful_substance', 'NO')
+        safe_write_cell(ws, 'B29', 'X' if harmful == 'YES' else '')
+        safe_write_cell(ws, 'D29', 'X' if harmful == 'NO' else '')
+        safe_write_cell(ws, 'C30', 'X' if data.get('fumes', False) else '')
+        safe_write_cell(ws, 'E30', 'X' if data.get('odors', False) else '')
+        safe_write_cell(ws, 'C31', 'X' if data.get('dust', False) else '')
+        safe_write_cell(ws, 'E31', 'X' if data.get('noise', False) else '')
+        safe_write_cell(ws, 'C32', 'X' if data.get('sparks', False) else '')
+        safe_write_cell(ws, 'E32', data.get('other_harmful', ''))
+        
+        # Utility Interruption
+        utility = data.get('utility_interruption', 'NO')
+        safe_write_cell(ws, 'B33', 'X' if utility == 'YES' else '')
+        safe_write_cell(ws, 'D33', 'X' if utility == 'NO' else '')
+        safe_write_cell(ws, 'F33', 'X' if utility == 'N/A' else '')
+        safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
         
         # Waste Generation
-        worksheet.write('A35', 'Will there be waste generation?', label_format)
         waste = data.get('waste_generation', 'NO')
-        worksheet.write('C35', 'YES')
-        worksheet.insert_checkbox('B35', {'checked': waste == 'YES'})
-        worksheet.write('D35', 'NO')
-        worksheet.insert_checkbox('E35', {'checked': waste == 'NO'})
+        safe_write_cell(ws, 'B35', 'X' if waste == 'YES' else '')
+        safe_write_cell(ws, 'D35', 'X' if waste == 'NO' else '')
+        safe_write_cell(ws, 'C36', data.get('waste_list', ''))
         
-        if waste == 'YES':
-            worksheet.write('A36', 'Identify and list possible waste generated', label_format)
-            worksheet.merge_range('C36:G36', data.get('waste_list', ''), text_format)
+        # PPE - mark with X
+        ppe_required = data.get('ppe_required', [])
+        ppe_cells = {
+            'Safety Shoes': 'B46',
+            'Hardhat': 'C46',
+            'Body Harness': 'D46',
+            'Gloves': 'E46',
+            'Welding Mask': 'B47',
+            'N95 Masks': 'C47',
+            'Goggles': 'D47'
+        }
+        for ppe, cell in ppe_cells.items():
+            safe_write_cell(ws, cell, 'X' if ppe in ppe_required else '')
         
-        # Tools and Materials
-        worksheet.write('A38', 'List of tools and materials to be used', label_format)
+        if 'Other PPE' in ppe_required:
+            safe_write_cell(ws, 'E47', data.get('other_ppe_text', ''))
+        
+        # Fill JHA Table
+        jha_steps = data.get('jha_steps', [])
+        row_start = 48
+        for i, step in enumerate(jha_steps):
+            if i >= 10:
+                break
+            safe_write_cell(ws, f'A{row_start + i}', step.get('step', ''))
+            safe_write_cell(ws, f'B{row_start + i}', step.get('hazard', ''))
+            safe_write_cell(ws, f'D{row_start + i}', step.get('controls', ''))
+        
+        # Fill Tools and Materials
         tools = data.get('tools_materials', [])
-        for i, tool in enumerate(tools[:10]):
-            worksheet.write(f'A{39+i}', tool, text_format)
+        tool_row_start = 39
+        for i, tool in enumerate(tools):
+            if i >= 10:
+                break
+            safe_write_cell(ws, f'A{tool_row_start + i}', tool)
         
-        # PPE
-        worksheet.write('A45', 'REQUIRED PPE', header_format)
-        ppe_row = 46
-        ppe_items = ['Safety Shoes', 'Hardhat', 'Body Harness', 'Gloves', 'Welding Mask', 'N95 Masks', 'Goggles', 'Other PPE']
-        ppe_selected = data.get('ppe_required', [])
-        
-        for i, ppe in enumerate(ppe_items):
-            col = chr(65 + i)  # A, B, C, D, etc.
-            worksheet.write(f'{col}{ppe_row}', ppe, label_format)
-            if ppe in ppe_selected:
-                worksheet.insert_checkbox(f'{col}{ppe_row+1}', {'checked': True})
-            else:
-                worksheet.insert_checkbox(f'{col}{ppe_row+1}', {'checked': False})
-        
-        if 'Other PPE' in ppe_selected:
-            worksheet.write('E47', data.get('other_ppe_text', ''), text_format)
-        
-        # Workers
-        worksheet.write('A50', 'List of workers', label_format)
+        # Fill Workers
         workers = data.get('workers', [])
-        for i, worker in enumerate(workers[:8]):
-            worksheet.write(f'A{51+i}', worker, text_format)
+        worker_row_start = 44
+        for i, worker in enumerate(workers):
+            if i >= 8:
+                break
+            safe_write_cell(ws, f'A{worker_row_start + i}', worker)
         
-        # Acknowledgement
-        worksheet.write('A58', 'ACKNOWLEDGEMENT', header_format)
-        worksheet.write('A59', 'Prepared By:', label_format)
-        worksheet.write('B59', data.get('prepared_by', ''), text_format)
-        worksheet.write('C59', 'Noted By', label_format)
-        worksheet.write('D59', data.get('noted_by', ''), text_format)
-        worksheet.write('E59', 'Approved By', label_format)
+        # Fill Acknowledgement
+        safe_write_cell(ws, 'B51', data.get('prepared_by', ''))
+        safe_write_cell(ws, 'C51', data.get('noted_by', ''))
+        safe_write_cell(ws, 'E51', data.get('approved_by', ''))
+        safe_write_cell(ws, 'C52', data.get('noted_by', ''))
+        safe_write_cell(ws, 'F59', 'X' if data.get('approved_status') == 'YES' else '')
+        safe_write_cell(ws, 'G52', data.get('safety_officer_approval', ''))
         
-        # Approval checkbox
-        worksheet.insert_checkbox('G59', {'checked': data.get('approved_status') == 'YES'})
+        # Save the workbook
+        wb.save(temp_template_path)
         
-        worksheet.write('A60', 'Project Safety Officer', label_format)
-        worksheet.write('B60', 'MNO/Project In-Charge', label_format)
-        worksheet.write('D60', data.get('safety_officer_approval', ''), text_format)
+        # Read the saved file into memory for download
+        with open(temp_template_path, 'rb') as f:
+            file_data = f.read()
         
-        # Close workbook
-        workbook.close()
+        # Clean up temp file
+        try:
+            os.unlink(temp_template_path)
+        except:
+            pass
         
-        # Get the file data
+        output = io.BytesIO(file_data)
         output.seek(0)
-        file_data = output.getvalue()
         
-        return io.BytesIO(file_data)
+        return output
         
     except Exception as e:
-        st.error(f"Error creating Excel with checkboxes: {str(e)}")
+        st.error(f"Error processing template: {str(e)}")
+        import traceback
+        st.error(traceback.format_exc())
         return None
 
 def get_excel_download_link(file_data, filename):
@@ -346,7 +259,6 @@ def main():
         
         st.subheader("🛠️ Work Details")
         
-        # High Risk
         high_risk = st.radio("Is work to be done with high risk?", ["NO", "YES"])
         
         if high_risk == "YES":
@@ -431,7 +343,6 @@ def main():
     with col2:
         st.subheader("⚠️ Job Hazard Assessment")
         
-        # Main JHA Table
         st.markdown("**JOB HAZARD ASSESSMENT**")
         
         jha_step1 = st.text_input("Job Step 1", value="Site Access")
@@ -579,34 +490,35 @@ def main():
     
     st.markdown("---")
     
-    # Important notice about checkboxes
     st.info("""
-    ℹ️ **About Checkboxes:** 
-    - This creates **interactive overlay checkboxes** (Form Controls)
-    - These float above the cells and can be clicked
-    - **Note:** You may need to enable editing/design mode in Excel to fully interact with them
-    - File is created using xlsxwriter for better checkbox support
+    ℹ️ **How Checkboxes Work:**
+    1. The template contains a VBA macro that creates overlay checkboxes
+    2. Data is filled using openpyxl (preserves all formatting)
+    3. The macro reads values from linked cells (X = checked, empty = unchecked)
+    4. **To activate checkboxes:** Open the file in Excel, enable macros, and run the `AddCheckboxes` macro
+    5. Or use the macro-enabled template version
     """)
     
     # Generate Excel button
     if st.button("📥 Generate Excel File", type="primary"):
-        with st.spinner("Generating Excel file with overlay checkboxes..."):
+        with st.spinner("Generating Excel file..."):
             try:
-                # First try with xlsxwriter
-                try:
-                    import xlsxwriter
-                    file_data = create_excel_with_overlay_checkboxes(data)
-                except ImportError:
-                    st.warning("xlsxwriter not installed. Falling back to openpyxl with Unicode checkboxes.")
-                    # Fallback to openpyxl with Unicode checkboxes
-                    file_data = create_excel_template_with_unicode(data)
-                
+                file_data = create_excel_template(data)
                 if file_data:
                     filename = f"HSWP_{project_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
                     download_link = get_excel_download_link(file_data.getvalue(), filename)
                     
                     st.success("✅ Excel file generated successfully!")
                     st.markdown(download_link, unsafe_allow_html=True)
+                    
+                    st.info("""
+                    📌 **Next Steps:**
+                    1. Download and open the file in Excel
+                    2. **Enable Macros** when prompted
+                    3. Press `Alt+F8` or go to Developer > Macros
+                    4. Select `AddCheckboxes` and click Run
+                    5. The overlay checkboxes will appear!
+                    """)
                     
                     with st.expander("📊 Preview Data Summary"):
                         summary_data = {
@@ -636,22 +548,25 @@ def main():
         2. Add JHA entries as needed
         3. Select required PPE
         4. Click 'Generate Excel File'
-        5. Download the completed file
+        5. Download and open in Excel
+        6. Enable macros
+        7. Run the AddCheckboxes macro
         """)
         
-        st.header("📋 Requirements")
+        st.header("📋 Template Requirements")
         st.markdown("""
-        - Python package: `xlsxwriter`
-        - Install with: `pip install xlsxwriter`
+        - Template file: `HSWP_template.xlsx`
+        - Must be in the repository root
+        - **Enable Macros** in Excel
+        - The original template is preserved
         """)
         
-        st.header("ℹ️ About Checkboxes")
+        st.header("🔧 How It Works")
         st.markdown("""
-        This creates **overlay checkboxes** that:
-        - Float above the cells
-        - Are interactive (clickable)
-        - Are Excel Form Controls
-        - Work like the ones in your template
+        1. **openpyxl** fills data in the template
+        2. **Linked cells** store checkbox states (X = checked)
+        3. **VBA macro** reads the linked cells and creates checkboxes
+        4. **Overlay checkboxes** appear on top of the cells
         """)
 
 if __name__ == "__main__":
