@@ -5,12 +5,10 @@ import io
 import base64
 from openpyxl import load_workbook
 from openpyxl.utils import range_boundaries
+from openpyxl.styles import Font, Alignment, PatternFill
 import os
 import shutil
 import tempfile
-from openpyxl.drawing.image import Image
-import zipfile
-import xml.etree.ElementTree as ET
 
 # Set page configuration
 st.set_page_config(
@@ -51,7 +49,7 @@ def safe_write_cell(ws, cell_address, value):
         return False
 
 def create_excel_template(data):
-    """Create Excel file with filled data - preserving form controls"""
+    """Create Excel file with filled data - using cells for checkmarks"""
     # Check if template exists
     template_path = 'HSWP_template.xlsx'
     if not os.path.exists(template_path):
@@ -65,11 +63,11 @@ def create_excel_template(data):
             shutil.copy2(template_path, tmp_file.name)
             temp_template_path = tmp_file.name
         
-        # Load the temporary copy with keep_vba=True to preserve controls
-        wb = load_workbook(temp_template_path, keep_vba=True)
+        # Load the template WITHOUT keep_vba to avoid corruption
+        wb = load_workbook(temp_template_path, data_only=True)
         ws = wb.worksheets[0]  # First sheet (Work Permit)
         
-        # Fill PROJECT DETAILS - using safe_write_cell for all
+        # Fill PROJECT DETAILS
         safe_write_cell(ws, 'B2', data.get('sub_contractor', ''))
         safe_write_cell(ws, 'D2', data.get('requesting_vendor', ''))
         safe_write_cell(ws, 'B4', data.get('project_in_charge', ''))
@@ -98,7 +96,7 @@ def create_excel_template(data):
         high_risk = data.get('high_risk', 'NO')
         safe_write_cell(ws, 'B12', high_risk)
         
-        # Work at Heights - use 'X' to mark checkboxes
+        # Work at Heights - use 'X' to mark selections
         if data.get('work_at_heights', False):
             safe_write_cell(ws, 'C12', 'X')
         if data.get('scaffold', False):
@@ -164,6 +162,14 @@ def create_excel_template(data):
         if utility == 'YES':
             safe_write_cell(ws, 'C34', data.get('affected_utilities', ''))
         
+        # Waste Generation
+        if data.get('waste_generation') == 'YES':
+            safe_write_cell(ws, 'B37', 'YES')
+            waste_list = data.get('waste_list', '')
+            safe_write_cell(ws, 'C37', waste_list)
+        else:
+            safe_write_cell(ws, 'B37', 'NO')
+        
         # Fill JHA Table (bottom section)
         jha_steps = data.get('jha_steps', [])
         row_start = 48
@@ -174,7 +180,7 @@ def create_excel_template(data):
             safe_write_cell(ws, f'B{row_start + i}', step.get('hazard', ''))
             safe_write_cell(ws, f'D{row_start + i}', step.get('controls', ''))
         
-        # Fill PPE - use 'X' to mark checkboxes
+        # Fill PPE - use 'X' to mark selections
         ppe_required = data.get('ppe_required', [])
         ppe_mapping = {
             'Safety Shoes': 'B42',
@@ -217,15 +223,7 @@ def create_excel_template(data):
             safe_write_cell(ws, 'E52', 'X')
         safe_write_cell(ws, 'G52', data.get('safety_officer_approval', ''))
         
-        # Fill waste generation section
-        if data.get('waste_generation') == 'YES':
-            safe_write_cell(ws, 'B37', 'YES')
-            waste_list = data.get('waste_list', '')
-            safe_write_cell(ws, 'C37', waste_list)
-        else:
-            safe_write_cell(ws, 'B37', 'NO')
-        
-        # Save the workbook with keep_vba=True to preserve form controls
+        # Save the workbook WITHOUT keep_vba to avoid corruption
         wb.save(temp_template_path)
         
         # Read the saved file into memory for download
@@ -385,7 +383,7 @@ def main():
         jha_hazard2 = st.text_input("Hazard 2", value="Trips/Falls: Uneven surfaces, debris, inadequate lighting")
         jha_control2 = st.text_area("Control 2", value="Clear work area of debris, ensure adequate lighting, wear appropriate footwear (safety shoes)", height=60)
         
-        # Step 3 - Handling Fiber Optics (default)
+        # Step 3
         jha_step3 = st.text_input("Job Step 3", value="Handling of Fiber Optic cables")
         jha_hazard3 = st.text_input("Hazard 3", value="Cuts/Lacerations: Sharp edges of fibers or connectors")
         jha_control3 = st.text_area("Control 3", value="Wear cut-resistant gloves. Handle fibers with care", height=60)
@@ -543,7 +541,6 @@ def main():
                     
                     # Preview data
                     with st.expander("📊 Preview Data Summary"):
-                        # Show a cleaner summary
                         summary_data = {
                             'Project': project_name,
                             'Location': work_location,
@@ -580,23 +577,21 @@ def main():
         - The template file 'HSWP_template.xlsx' must be in the repository
         - All fields marked with * are required
         - The generated file will be named with the project name and timestamp
-        - The original template will NOT be modified
-        - **IMPORTANT:** Form controls (checkboxes) are preserved
+        - **Note:** 'X' is used to mark selections instead of checkboxes
         """)
         
         st.header("ℹ️ About")
         st.markdown("""
         This tool automates the creation of Health and Safety Work Permits.
         
-        **Version:** 1.0.3
+        **Version:** 1.0.4
         **Last Updated:** 2026-08-19
         
         **Features:**
-        - Preserves form controls (checkboxes)
+        - Uses 'X' marks in cells instead of form controls (more reliable)
         - Works with a copy of the template (original preserved)
         - Handles merged cells properly
         - Complete form coverage
-        - Data validation
         - Excel export with formatting
         """)
 
